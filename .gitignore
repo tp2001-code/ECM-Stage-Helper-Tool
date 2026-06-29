@@ -1,0 +1,21 @@
+# Visual Studio / .NET Build-Ausgaben
+bin/
+obj/
+*.user
+*.suo
+.vs/
+*.cache
+*.pidb
+*.userprefs
+
+# NuGet
+packages/
+*.nupkg
+
+# Testausgaben
+TestResults/
+
+# Andere Systeme
+Thumbs.db
+Desktop.ini
+.DS_Store
