@@ -25,6 +25,9 @@ namespace ECM_Stage_Helper_Tool
         private readonly UndoStack _undo = new UndoStack();
         private static readonly CultureInfo _deDe = new CultureInfo("de-DE");
 
+        // --- BIN ---
+        private BinFlash _binFlash;
+
         // --- Interne Zwischenablage (Auswahl kopieren / einfügen) ---
         private double[,] _clipboard;
         private int _clipboardRows, _clipboardCols;
@@ -38,8 +41,9 @@ namespace ECM_Stage_Helper_Tool
             _toolTip.SetToolTip(_btnView2D, "Tabellenansicht (HEX)");
             _toolTip.SetToolTip(_btnView3D, "3D-Ansicht");
             // Undo-Menü initial deaktivieren
-            _miUndo.Enabled = false;
-            _miRedo.Enabled = false;
+            _miUndo.Enabled    = false;
+            _miRedo.Enabled    = false;
+            _miSaveBin.Enabled = false;
             TryLoadLastFolder();
             if (_currentMap == null) SetUiForNoMap();
         }
@@ -48,11 +52,14 @@ namespace ECM_Stage_Helper_Tool
         // Menü-Handler (vom Designer verdrahtet)
         // -----------------------------------------------------------------------
 
+        private void MiNew_Click(object sender, EventArgs e)   => ResetAll();
         private void MiOpen_Click(object sender, EventArgs e)   => OpenCsvFolder();
         private void MiExit_Click(object sender, EventArgs e)   => Close();
         private void MiToggle_Click(object sender, EventArgs e) => ToggleOriginalView();
         private void MiUndo_Click(object sender, EventArgs e)   => ExecuteUndo();
         private void MiRedo_Click(object sender, EventArgs e)   => ExecuteRedo();
+        private void MiOpenBin_Click(object sender, EventArgs e) => OpenBin();
+        private void MiSaveBin_Click(object sender, EventArgs e) => SaveBin();
 
         private void MBearbeiten_DropDownOpening(object sender, EventArgs e)
         {
@@ -106,12 +113,53 @@ namespace ECM_Stage_Helper_Tool
 
             // --- Grid füllt den Rest unterhalb des Info-Bereichs ---
             int gridY = row2Y + btnH + gap;
-            var gridLoc = new Point(gridX, gridY);
-            var gridSz  = new Size(gridW, ClientSize.Height - gridY - gap);
-            _dgv.Location     = gridLoc;
-            _dgv.Size         = gridSz;
-            _panel3D.Location = gridLoc;
-            _panel3D.Size     = gridSz;
+            int gridX2 = gridX;
+            int gridW2 = gridW;
+
+            bool binVisible = _dgvBin != null && _dgvBin.Visible;
+
+            if (binVisible)
+            {
+                // Wenn BIN-Tabelle sichtbar: verfügbaren Raum 50/50 teilen
+                int totalH    = ClientSize.Height - gridY - gap;
+                int headerH   = _lblBinHeader.Height + 2;
+                int btnBinH   = _btnApplyToBin.Height;
+                int csvH      = (totalH - headerH - btnBinH - gap * 2) / 2;
+                int binH      = totalH - csvH - headerH - btnBinH - gap * 2;
+                if (csvH < 60) csvH = 60;
+                if (binH < 60) binH = 60;
+
+                _dgv.Location     = new Point(gridX2, gridY);
+                _dgv.Size         = new Size(gridW2, csvH);
+                _panel3D.Location = new Point(gridX2, gridY);
+                _panel3D.Size     = new Size(gridW2, csvH);
+
+                int binHeaderY = _dgv.Bottom + gap;
+                _lblBinHeader.Left   = gridX2;
+                _lblBinHeader.Top    = binHeaderY;
+                _lblBinHeader.Width  = gridW2 - _btnApplyToBin.Width - gap;
+
+                _btnApplyToBin.Left = ClientSize.Width - _btnApplyToBin.Width - gap;
+                _btnApplyToBin.Top  = binHeaderY;
+
+                _dgvBin.Location = new Point(gridX2, binHeaderY + _lblBinHeader.Height + 2);
+                _dgvBin.Size     = new Size(gridW2, binH);
+            }
+            else
+            {
+                // Kein BIN: normales Grid füllt alles
+                var gridLoc = new Point(gridX2, gridY);
+                var gridSz  = new Size(gridW2, ClientSize.Height - gridY - gap);
+                _dgv.Location     = gridLoc;
+                _dgv.Size         = gridSz;
+                _panel3D.Location = gridLoc;
+                _panel3D.Size     = gridSz;
+            }
+
+            // Border-Panel immer passend hinter _dgv legen
+            const int border = 3;
+            _pnlOriginalBorder.Location = new Point(_dgv.Left - border, _dgv.Top - border);
+            _pnlOriginalBorder.Size     = new Size(_dgv.Width + border * 2, _dgv.Height + border * 2);
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -161,8 +209,51 @@ namespace ECM_Stage_Helper_Tool
             if (_currentMap == null) return;
             _showingOriginal = !_showingOriginal;
             RenderMap(_currentMap);
+            UpdateDgvBorderPanel();
             if (_show3D)
                 _panel3D.SetOriginalView(_showingOriginal);
+        }
+
+        /// <summary>Erzwingt ein Neuzeichnen des DGV, damit der Außenrahmen aktualisiert wird.</summary>
+        private void UpdateDgvBorderPanel()
+        {
+            _pnlOriginalBorder.Visible = false; // Panel nicht verwendet
+            _dgv.Invalidate();
+        }
+
+        /// <summary>
+        /// Zeichnet auf die äußersten Datenzellen einen grünen Außenrahmen,
+        /// wenn die Original-Ansicht aktiv ist.
+        /// </summary>
+        private void Dgv_CellPainting(object sender, DataGridViewCellPaintingEventArgs e)
+        {
+            if (!_showingOriginal) return;
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return; // Header überspringen
+
+            int lastRow = _dgv.Rows.Count - 1;
+            int lastCol = _dgv.Columns.Count - 1;
+
+            bool isTop    = e.RowIndex == 0;
+            bool isBottom = e.RowIndex == lastRow;
+            bool isLeft   = e.ColumnIndex == 0;
+            bool isRight  = e.ColumnIndex == lastCol;
+
+            if (!isTop && !isBottom && !isLeft && !isRight) return;
+
+            // Zelle normal zeichnen lassen
+            e.Paint(e.ClipBounds, DataGridViewPaintParts.All);
+
+            using (var pen = new Pen(Color.FromArgb(40, 180, 40), 2f))
+            {
+                var r = e.CellBounds;
+                // Die 2px-Linie liegt 1px innen, damit sie nicht abgeschnitten wird
+                if (isTop)    e.Graphics.DrawLine(pen, r.Left,  r.Top + 1,  r.Right - 1, r.Top + 1);
+                if (isBottom) e.Graphics.DrawLine(pen, r.Left,  r.Bottom - 2, r.Right - 1, r.Bottom - 2);
+                if (isLeft)   e.Graphics.DrawLine(pen, r.Left + 1, r.Top, r.Left + 1,  r.Bottom - 1);
+                if (isRight)  e.Graphics.DrawLine(pen, r.Right - 2, r.Top, r.Right - 2, r.Bottom - 1);
+            }
+
+            e.Handled = true;
         }
 
         private void ExecuteUndo()
@@ -173,7 +264,10 @@ namespace ECM_Stage_Helper_Tool
                 _showingOriginal = false;
                 action.Undo();
                 if (_currentMap != null)
+                {
                     RenderMap(_currentMap);
+                    if (_binFlash != null) RenderBinMap(_currentMap);
+                }
             }
         }
 
@@ -185,7 +279,10 @@ namespace ECM_Stage_Helper_Tool
                 _showingOriginal = false;
                 action.Redo();
                 if (_currentMap != null)
+                {
                     RenderMap(_currentMap);
+                    if (_binFlash != null) RenderBinMap(_currentMap);
+                }
             }
         }
 
@@ -304,6 +401,63 @@ namespace ECM_Stage_Helper_Tool
                 LoadMapsFromFolder(last);
         }
 
+        /// <summary>
+        /// Alle Daten zurücksetzen (Neu). Fragt vorher ob ungespeicherte Änderungen
+        /// gespeichert werden sollen – getrennt für CSV und BIN.
+        /// </summary>
+        private void ResetAll()
+        {
+            // --- CSV: Warnung wenn mindestens eine Map geändert wurde ---
+            bool csvModified = _maps.Any(m => m.ModifiedCells.Count > 0);
+            if (csvModified)
+            {
+                var ans = MessageBox.Show(
+                    "Es gibt ungespeicherte CSV-Änderungen.\n\n" +
+                    "Soll die aktuelle CSV-Map jetzt als »-mod«-Datei gespeichert werden,\n" +
+                    "bevor alle Daten gelöscht werden?",
+                    "Ungespeicherte CSV-Änderungen",
+                    MessageBoxButtons.YesNoCancel,
+                    MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button1);
+                if (ans == DialogResult.Cancel) return;
+                if (ans == DialogResult.Yes && _currentMap != null)
+                    SaveMapAsModSilent(_currentMap);
+            }
+
+            // --- BIN: Warnung wenn BIN geladen und im Speicher verändert ---
+            if (_binFlash != null && _binFlash.IsModified)
+            {
+                var ans = MessageBox.Show(
+                    "Die BIN-Datei wurde verändert aber noch nicht gespeichert.\n\n" +
+                    "Soll die BIN jetzt gespeichert werden,\n" +
+                    "bevor alle Daten gelöscht werden?",
+                    "Ungespeicherte BIN-Änderungen",
+                    MessageBoxButtons.YesNoCancel,
+                    MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button1);
+                if (ans == DialogResult.Cancel) return;
+                if (ans == DialogResult.Yes) SaveBin();
+            }
+
+            // --- Alles zurücksetzen ---
+            _maps.Clear();
+            _lbMaps.Items.Clear();
+            _currentMap   = null;
+            _csvFolder    = null;
+            _showingOriginal = false;
+            _clipboard    = null;
+            _binFlash     = null;
+            _dgv.Columns.Clear();
+            _dgv.Rows.Clear();
+            _dgvBin.Columns.Clear();
+            _dgvBin.Rows.Clear();
+            _undo.Clear();
+
+            _miSaveBin.Enabled = false;
+            Text = "ECM Stage Helper – Kennfeld Remapping";
+            SetUiForNoMap();
+        }
+
         /// <summary>Ordner-Dialog anzeigen und Ordner in Einstellungen speichern.</summary>
         private void OpenCsvFolder()
         {
@@ -384,6 +538,15 @@ namespace ECM_Stage_Helper_Tool
             SetUiForMap();
             if (_show3D)
                 _panel3D.SetMap(_currentMap);
+            // BIN-Tabelle bei Map-Wechsel aktualisieren
+            if (_binFlash != null)
+            {
+                RenderBinMap(_currentMap);
+                _dgvBin.Visible        = true;
+                _lblBinHeader.Visible  = true;
+                _btnApplyToBin.Visible = true;
+                Form1_Resize(this, EventArgs.Empty);
+            }
         }
 
         private void SetUiForNoMap()
@@ -400,6 +563,9 @@ namespace ECM_Stage_Helper_Tool
             _miRedo.Enabled       = false;
             _miToggle.Enabled     = false;
             _mBearbeiten.Enabled  = false;
+            _dgvBin.Visible        = false;
+            _lblBinHeader.Visible  = false;
+            _btnApplyToBin.Visible = false;
         }
 
         private void SetUiForMap()
@@ -418,6 +584,8 @@ namespace ECM_Stage_Helper_Tool
         {
             try
             {
+                using (new DrawingLocker(_dgv))
+                {
                 _dgv.SuspendLayout();
                 _dgv.Columns.Clear();
                 _dgv.Rows.Clear();
@@ -477,10 +645,13 @@ namespace ECM_Stage_Helper_Tool
                 _lblMapName.Visible = !string.IsNullOrEmpty(map.MapName);
                 _lblUnit.Text       = map.Unit ?? "";
                 _lblUnit.Visible    = !string.IsNullOrEmpty(map.Unit);
-            }
-            finally
-            {
                 _dgv.ResumeLayout();
+                } // DrawingLocker.Dispose → einmaliges Refresh
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Fehler beim Rendern: {ex.Message}", "Fehler",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -770,6 +941,177 @@ namespace ECM_Stage_Helper_Tool
             }
         }
 
+        // -----------------------------------------------------------------------
+        // BIN laden / speichern
+        // -----------------------------------------------------------------------
+
+        /// <summary>
+        /// Befüllt _dgvBin mit den Rohwerten aus dem geladenen BIN-Dump für die
+        /// angegebene Map.
+        /// <para>Normalmodus (<paramref name="highlightWritten"/>=false):
+        /// Zellen, deren CSV-Wert vom BIN-Wert abweicht, werden rot markiert.</para>
+        /// <para>Nach-Übernehmen-Modus (<paramref name="highlightWritten"/>=true):
+        /// Die Zellen aus <see cref="MapModel.ModifiedCells"/> werden rot markiert
+        /// (zeigt an, was gerade in die BIN geschrieben wurde).</para>
+        /// </summary>
+        private void RenderBinMap(MapModel map, bool highlightWritten = false)
+        {
+            if (_binFlash == null || map == null) return;
+
+            double[,] binValues = _binFlash.ReadMapValues(map);
+
+            using (new DrawingLocker(_dgvBin))
+            {
+            _dgvBin.SuspendLayout();
+            _dgvBin.Columns.Clear();
+            _dgvBin.Rows.Clear();
+            _dgvBin.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
+            _dgvBin.TopLeftHeaderCell.Value = map.AxisLabel ?? "";
+            _dgvBin.TopLeftHeaderCell.Style.BackColor = Color.FromArgb(180, 200, 230);
+            _dgvBin.TopLeftHeaderCell.Style.ForeColor = Color.Black;
+
+            if (binValues == null)
+            {
+                _dgvBin.Columns.Add("info", "–");
+                _dgvBin.Rows.Add(1);
+                _dgvBin.Rows[0].Cells[0].Value = "Keine BIN-Adresse für diese Map verfügbar.";
+                _dgvBin.ResumeLayout();
+                return;
+            }
+
+            for (int c = 0; c < map.Cols; c++)
+            {
+                var col = new DataGridViewTextBoxColumn
+                {
+                    HeaderText = map.XAxis[c].ToString(_deDe),
+                    Name       = $"B{c}",
+                    Width      = 75,
+                    SortMode   = DataGridViewColumnSortMode.NotSortable,
+                    ReadOnly   = true
+                };
+                col.HeaderCell.Style.BackColor = Color.FromArgb(180, 230, 180);
+                col.HeaderCell.Style.ForeColor = Color.Black;
+                _dgvBin.Columns.Add(col);
+            }
+
+            _dgvBin.Rows.Add(map.Rows);
+
+            for (int r = 0; r < map.Rows; r++)
+            {
+                _dgvBin.Rows[r].HeaderCell.Value = map.YAxis[r].ToString(_deDe);
+                _dgvBin.Rows[r].HeaderCell.Style.BackColor = Color.FromArgb(210, 225, 255);
+                _dgvBin.Rows[r].HeaderCell.Style.ForeColor = Color.Black;
+
+                for (int c = 0; c < map.Cols; c++)
+                {
+                    var cell = _dgvBin.Rows[r].Cells[c];
+                    double binVal = binValues[r, c];
+                    double csvVal = map.Values[r, c];
+                    cell.Value = binVal.ToString("F2", _deDe);
+
+                    bool mark = highlightWritten
+                        ? map.IsCellModified(r, c)
+                        : Math.Abs(csvVal - binVal) > 0.005;
+                    cell.Style.BackColor = mark ? Color.LightCoral : Color.White;
+                    cell.Style.ForeColor = mark ? Color.DarkRed    : Color.Black;
+                }
+            }
+
+            _dgvBin.ResumeLayout();
+            } // DrawingLocker.Dispose → einmaliges Refresh
+        }
+
+        private void OpenBin()
+        {
+            using (var dlg = new OpenFileDialog())
+            {
+                dlg.Title = "BIN-Flash-Dump öffnen";
+                dlg.Filter = "BIN-Dateien|*.bin|Alle Dateien|*.*";
+                if (_csvFolder != null)
+                    dlg.InitialDirectory = _csvFolder;
+                if (dlg.ShowDialog() != DialogResult.OK) return;
+                try
+                {
+                    _binFlash = BinFlash.Load(dlg.FileName);
+                    Text = $"ECM Stage Helper – {Path.GetFileName(dlg.FileName)}";
+                    // BIN-Controls sichtbar machen
+                    _miSaveBin.Enabled   = true;
+                    _btnApplyToBin.Visible = _currentMap != null;
+                    _lblBinHeader.Visible  = _currentMap != null;
+                    _dgvBin.Visible        = _currentMap != null;
+                    if (_currentMap != null) RenderBinMap(_currentMap);
+                    MessageBox.Show($"BIN geladen:\n{dlg.FileName}", "BIN geöffnet",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Fehler beim Laden der BIN:\n{ex.Message}", "Fehler",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private void SaveBin()
+        {
+            if (_binFlash == null) return;
+            using (var dlg = new SaveFileDialog())
+            {
+                dlg.Title = "BIN-Flash-Dump speichern";
+                dlg.Filter = "BIN-Dateien|*.bin|Alle Dateien|*.*";
+                dlg.FileName = Path.GetFileName(_binFlash.FilePath);
+                if (_csvFolder != null)
+                    dlg.InitialDirectory = _csvFolder;
+                if (dlg.ShowDialog() != DialogResult.OK) return;
+                try
+                {
+                    _binFlash.Save(dlg.FileName);
+                    MessageBox.Show($"BIN gespeichert:\n{dlg.FileName}", "Gespeichert",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Fehler beim Speichern der BIN:\n{ex.Message}", "Fehler",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
+        private void BtnApplyToBin_Click(object sender, EventArgs e)
+        {
+            if (_binFlash == null || _currentMap == null) return;
+
+            var result = MessageBox.Show(
+                $"CSV-Werte von\n\"{_currentMap.MapName ?? _currentMap.Name}\"\nin die BIN übernehmen?\n\n" +
+                "Die BIN-Datei wird im Speicher verändert.\n" +
+                "Danach mit \"BIN Speichern\" sichern.",
+                "Werte übernehmen – Rückfrage",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+
+            if (result != DialogResult.Yes) return;
+
+            if (!_binFlash.WriteMapValues(_currentMap))
+            {
+                MessageBox.Show(
+                    "Die Map hat keine gültige BIN-Adresse oder liegt außerhalb des Dumps.\n" +
+                    "Es wurden keine Werte geschrieben.",
+                    "Nicht möglich",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            // BIN-Tabelle neu rendern: jetzt BIN == CSV, aber geänderte Zellen rot markieren
+            RenderBinMap(_currentMap, highlightWritten: true);
+            MessageBox.Show(
+                "CSV-Werte wurden in die BIN übertragen.\n" +
+                "Vergiss nicht, die BIN zu speichern (Datei → BIN speichern).",
+                "Übernommen",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+
         private void SaveMapAsMod()
         {
             if (_currentMap == null) return;
@@ -811,6 +1153,7 @@ namespace ECM_Stage_Helper_Tool
                 snapshotAction.CaptureAfterState();
                 _undo.Push(snapshotAction);
                 RenderMap(_currentMap);
+                if (_binFlash != null) RenderBinMap(_currentMap);
             }
         }
 
@@ -830,6 +1173,7 @@ namespace ECM_Stage_Helper_Tool
             _undo.Push(new CellUndoAction(_currentMap, row, mapCol, _currentMap.Values[row, mapCol], resetTarget));
             _currentMap.ResetCell(row, mapCol);
             RefreshCell(row, mapCol);
+            if (_binFlash != null) RenderBinMap(_currentMap);
         }
 
         // -----------------------------------------------------------------------

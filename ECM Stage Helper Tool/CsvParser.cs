@@ -125,24 +125,45 @@ namespace ECM_Stage_Helper_Tool
         public static void SaveMap(MapModel map, string path)
         {
             var sb = new StringBuilder();
+            char sep = ';'; // ECM-Titanium-Format: Semikolon als Trenner
 
-            // Header-Zeile: leer, dann X-Achse
-            sb.Append(string.Empty);
+            // --- Metadaten-Zeilen aus der Originaldatei übernehmen ---
+            if (File.Exists(map.FilePath))
+            {
+                var origLines = File.ReadAllLines(map.FilePath, Encoding.Default)
+                                    .Where(l => !string.IsNullOrWhiteSpace(l))
+                                    .ToArray();
+                sep = DetectSeparator(origLines);
+
+                foreach (string origLine in origLines)
+                {
+                    var fields = SplitLine(origLine, sep);
+                    bool isDataHeader = fields.Length >= 2 && TryParseDouble(fields[1], out _);
+                    if (isDataHeader) break;
+                    sb.AppendLine(origLine); // Metazeile unverändert kopieren
+                }
+            }
+
+            // Dezimaltrennzeichen passend zum Feldseparator wählen
+            var numCulture = sep == ';' ? new CultureInfo("de-DE") : CultureInfo.InvariantCulture;
+
+            // --- Achsen-Header: Beschriftung + X-Achse ---
+            sb.Append(map.AxisLabel ?? string.Empty);
             for (int c = 0; c < map.Cols; c++)
             {
-                sb.Append(",");
-                sb.Append(ToStr(map.XAxis[c]));
+                sb.Append(sep);
+                sb.Append(map.XAxis[c].ToString(numCulture));
             }
             sb.AppendLine();
 
-            // Datenzeilen
+            // --- Datenzeilen ---
             for (int r = 0; r < map.Rows; r++)
             {
-                sb.Append(ToStr(map.YAxis[r]));
+                sb.Append(map.YAxis[r].ToString(numCulture));
                 for (int c = 0; c < map.Cols; c++)
                 {
-                    sb.Append(",");
-                    sb.Append(ToStr(map.Values[r, c]));
+                    sb.Append(sep);
+                    sb.Append(map.Values[r, c].ToString(numCulture));
                 }
                 sb.AppendLine();
             }
