@@ -138,6 +138,69 @@ namespace ECM_Stage_Helper_Tool
         }
 
         // ---------------------------------------------------------------------------
+        // Sortierung
+        // ---------------------------------------------------------------------------
+
+        /// <summary>Sortiert Spalten (X-Achse) aufsteigend und ordnet Values entsprechend um.</summary>
+        private static void SortColumns(MapModel map)
+        {
+            // Indizes nach XAxis-Wert aufsteigend sortieren
+            var order = new int[map.Cols];
+            for (int i = 0; i < map.Cols; i++) order[i] = i;
+            Array.Sort(order, (a, b) => map.XAxis[a].CompareTo(map.XAxis[b]));
+
+            var newX = new double[map.Cols];
+            var newV = new double[map.Rows, map.Cols];
+            var newMod = new HashSet<(int, int)>();
+
+            for (int newC = 0; newC < map.Cols; newC++)
+            {
+                int oldC = order[newC];
+                newX[newC] = map.XAxis[oldC];
+                for (int r = 0; r < map.Rows; r++)
+                {
+                    newV[r, newC] = map.Values[r, oldC];
+                    if (map.IsCellModified(r, oldC))
+                        newMod.Add((r, newC));
+                }
+            }
+
+            map.XAxis = newX;
+            map.Values = newV;
+            map.ModifiedCells.Clear();
+            foreach (var cell in newMod) map.ModifiedCells.Add(cell);
+        }
+
+        /// <summary>Sortiert Zeilen (Y-Achse) aufsteigend und ordnet Values entsprechend um.</summary>
+        private static void SortRows(MapModel map)
+        {
+            var order = new int[map.Rows];
+            for (int i = 0; i < map.Rows; i++) order[i] = i;
+            Array.Sort(order, (a, b) => map.YAxis[a].CompareTo(map.YAxis[b]));
+
+            var newY = new double[map.Rows];
+            var newV = new double[map.Rows, map.Cols];
+            var newMod = new HashSet<(int, int)>();
+
+            for (int newR = 0; newR < map.Rows; newR++)
+            {
+                int oldR = order[newR];
+                newY[newR] = map.YAxis[oldR];
+                for (int c = 0; c < map.Cols; c++)
+                {
+                    newV[newR, c] = map.Values[oldR, c];
+                    if (map.IsCellModified(oldR, c))
+                        newMod.Add((newR, c));
+                }
+            }
+
+            map.YAxis = newY;
+            map.Values = newV;
+            map.ModifiedCells.Clear();
+            foreach (var cell in newMod) map.ModifiedCells.Add(cell);
+        }
+
+        // ---------------------------------------------------------------------------
         // Mathematik
         // ---------------------------------------------------------------------------
 

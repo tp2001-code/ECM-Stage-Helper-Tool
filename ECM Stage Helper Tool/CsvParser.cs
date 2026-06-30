@@ -8,9 +8,12 @@ using System.Text;
 namespace ECM_Stage_Helper_Tool
 {
     /// <summary>
-    /// Lädt und speichert ECM-Kennfeld-CSVs.
-    /// Erwartetes Format: Erste Zeile = [leer, x0, x1, ...]; Folgezeilen = [y, v0, v1, ...]
-    /// Unterstützt Komma und Semikolon als Trennzeichen sowie Punkt/Komma als Dezimaltrennzeichen.
+    /// Lädt und speichert ECM-Kennfeld-CSVs im ECM Titanium Export-Format.
+    /// Format:
+    ///   1. Optionale Metadaten-Zeilen (z.B. "Size: 16x14", "MAP: ...", werden übersprungen)
+    ///   2. Achsen-Header: Feld[0] = Beschriftung (z.B. "RPM|hPa"), Feld[1..n] = X-Achsenwerte
+    ///   3. Datenzeilen:   Feld[0] = Y-Achsenwert, Feld[1..n] = Zellwerte
+    /// Unterstützt Semikolon und Komma als Trennzeichen sowie Punkt/Komma als Dezimaltrennzeichen.
     /// </summary>
     public static class CsvParser
     {
@@ -27,10 +30,50 @@ namespace ECM_Stage_Helper_Tool
 
                 char sep = DetectSeparator(lines);
 
-                // Erste Zeile: erstes Feld leer, danach X-Achsenwerte
-                var headerFields = SplitLine(lines[0], sep);
+                // --- Metadaten lesen und Daten-Header-Zeile suchen ---
+                // Daten-Header erkannt, wenn: ≥2 Felder UND zweites Feld ist numerisch
+                string sizeString = null;
+                string mapName    = null;
+                string unit       = null;
+                int dataStart = -1;
+
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    string line = lines[i];
+
+                    // Size-Metazeile extrahieren (z.B. "Size: 16x14")
+                    if (line.StartsWith("Size:", StringComparison.OrdinalIgnoreCase))
+                        sizeString = line.Substring(5).Trim();
+
+                    // MAP-Name extrahieren (z.B. "MAP : Begrenzer Kraftstoffmenge")
+                    if (line.StartsWith("MAP", StringComparison.OrdinalIgnoreCase))
+                    {
+                        int colon = line.IndexOf(':');
+                        if (colon >= 0)
+                            mapName = line.Substring(colon + 1).Trim();
+                    }
+
+                    // Unit extrahieren (z.B. "Unit: mm3/Stk")
+                    if (line.StartsWith("Unit:", StringComparison.OrdinalIgnoreCase))
+                        unit = line.Substring(5).Trim();
+
+                    var fields = SplitLine(line, sep);
+                    if (fields.Length >= 2 && TryParseDouble(fields[1], out _))
+                    {
+                        dataStart = i;
+                        break;
+                    }
+                }
+
+                if (dataStart < 0)
+                    throw new InvalidDataException("Keine Achsen-Header-Zeile gefunden (zweites Feld muss numerisch sein).");
+
+                // --- X-Achse aus der Daten-Header-Zeile (erstes Feld = Achsenbeschriftung) ---
+                var headerFields = SplitLine(lines[dataStart], sep);
                 if (headerFields.Length < 2)
                     throw new InvalidDataException("Erste CSV-Zeile enthält keine X-Achsenwerte.");
+
+                string axisLabel = headerFields[0].Length > 0 ? headerFields[0] : null;
 
                 var xList = new List<double>();
                 for (int i = 1; i < headerFields.Length; i++)
@@ -44,7 +87,7 @@ namespace ECM_Stage_Helper_Tool
                 var yList = new List<double>();
                 var rowData = new List<double[]>();
 
-                for (int r = 1; r < lines.Length; r++)
+                for (int r = dataStart + 1; r < lines.Length; r++)
                 {
                     var fields = SplitLine(lines[r], sep);
                     if (fields.Length < 2) continue;
@@ -71,7 +114,7 @@ namespace ECM_Stage_Helper_Tool
                     for (int c = 0; c < xList.Count; c++)
                         values[r, c] = rowData[r][c];
 
-                return new MapModel(path, xList.ToArray(), yList.ToArray(), values);
+                return new MapModel(path, xList.ToArray(), yList.ToArray(), values, sizeString, axisLabel, mapName, unit);
             }
             catch (Exception ex)
             {
@@ -111,11 +154,14 @@ namespace ECM_Stage_Helper_Tool
 
         private static char DetectSeparator(string[] lines)
         {
-            // Heuristik: häufigeres Zeichen in der ersten Zeile gewinnt
-            string header = lines[0];
-            int commas = header.Count(ch => ch == ',');
-            int semis = header.Count(ch => ch == ';');
-            return semis > commas ? ';' : ',';
+            // Erste Zeile mit mindestens 2 Semikolons gewinnt (dt. CSV-Format: ; = Spalte, , = Dezimal)
+            foreach (string line in lines)
+            {
+                if (line.Count(ch => ch == ';') >= 2)
+                    return ';';
+            }
+            // Fallback: Komma als Trennzeichen
+            return ',';
         }
 
         private static string[] SplitLine(string line, char sep)
@@ -144,11 +190,12 @@ namespace ECM_Stage_Helper_Tool
         private static bool TryParseDouble(string s, out double value)
         {
             s = s.Trim();
-            if (double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out value)) return true;
-            if (double.TryParse(s, NumberStyles.Any, new CultureInfo("de-DE"), out value)) return true;
-            // Fallback: Komma als Dezimaltrennzeichen durch Punkt ersetzen
+            // NumberStyles.Float (kein AllowThousands): verhindert, dass "-2,67" als "-267" geparst wird
+            if (double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out value)) return true;
+            if (double.TryParse(s, NumberStyles.Float, new CultureInfo("de-DE"), out value)) return true;
+            // Fallback: Komma durch Punkt ersetzen
             string normalized = s.Replace(',', '.');
-            return double.TryParse(normalized, NumberStyles.Any, CultureInfo.InvariantCulture, out value);
+            return double.TryParse(normalized, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
         }
 
         private static string ToStr(double d) => d.ToString(CultureInfo.InvariantCulture);

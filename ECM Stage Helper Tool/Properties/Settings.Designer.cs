@@ -26,5 +26,14 @@ namespace ECM_Stage_Helper_Tool.Properties
                 return defaultInstance;
             }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string LastCsvFolder
+        {
+            get { return ((string)(this["LastCsvFolder"])); }
+            set { this["LastCsvFolder"] = value; }
+        }
     }
 }

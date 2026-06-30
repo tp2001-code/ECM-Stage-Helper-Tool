@@ -11,6 +11,18 @@ namespace ECM_Stage_Helper_Tool
         public string FilePath { get; private set; }
         public string Name => Path.GetFileName(FilePath);
 
+        /// <summary>Größenangabe aus der CSV-Metazeile (z.B. "16x14"), kann null sein.</summary>
+        public string SizeString { get; private set; }
+
+        /// <summary>Kartenname aus der CSV-Metazeile (z.B. "MAP : Begrenzer Kraftstoffmenge"), kann null sein.</summary>
+        public string MapName { get; private set; }
+
+        /// <summary>Einheit aus der CSV-Metazeile (z.B. "mm3/Stk"), kann null sein.</summary>
+        public string Unit { get; private set; }
+
+        /// <summary>Achsenbeschriftung aus der CSV-Headerzeile (z.B. "RPM|mm3/Stk"), kann null sein.</summary>
+        public string AxisLabel { get; private set; }
+
         /// <summary>X-Achse (Spaltenköpfe), Länge = Cols</summary>
         public double[] XAxis { get; set; }
 
@@ -31,9 +43,13 @@ namespace ECM_Stage_Helper_Tool
         public int Rows => YAxis.Length;
         public int Cols => XAxis.Length;
 
-        public MapModel(string filePath, double[] xAxis, double[] yAxis, double[,] values)
+        public MapModel(string filePath, double[] xAxis, double[] yAxis, double[,] values, string sizeString = null, string axisLabel = null, string mapName = null, string unit = null)
         {
             FilePath = filePath;
+            SizeString = sizeString;
+            AxisLabel = axisLabel;
+            MapName = mapName;
+            Unit = unit;
             XAxis = (double[])xAxis.Clone();
             YAxis = (double[])yAxis.Clone();
             Values = (double[,])values.Clone();
@@ -62,5 +78,8 @@ namespace ECM_Stage_Helper_Tool
             Values[row, col] = _originalValues[row, col];
             UnmarkCell(row, col);
         }
+
+        /// <summary>Gibt den unveränderten Originalwert einer Zelle zurück (für Vorschau).</summary>
+        public double GetOriginalValue(int row, int col) => _originalValues[row, col];
     }
 }
