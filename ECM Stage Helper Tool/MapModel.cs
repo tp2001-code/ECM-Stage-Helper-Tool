@@ -81,5 +81,11 @@ namespace ECM_Stage_Helper_Tool
 
         /// <summary>Gibt den unveränderten Originalwert einer Zelle zurück (für Vorschau).</summary>
         public double GetOriginalValue(int row, int col) => _originalValues[row, col];
+
+        /// <summary>Gibt den ursprünglichen X-Achsenwert (Spaltenkopf) zurück.</summary>
+        public double GetOriginalX(int col) => _originalX[col];
+
+        /// <summary>Gibt den ursprünglichen Y-Achsenwert (Zeilenkopf) zurück.</summary>
+        public double GetOriginalY(int row) => _originalY[row];
     }
 }

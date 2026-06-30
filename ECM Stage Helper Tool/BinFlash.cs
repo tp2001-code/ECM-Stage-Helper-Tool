@@ -150,8 +150,8 @@ namespace ECM_Stage_Helper_Tool
         // Hilfsmethoden
         // -----------------------------------------------------------------------
 
-        /// <summary>Liest die Addr-Zeile aus der CSV-Datei der Map und gibt die Adresse zurück.</summary>
-        private static long ParseAddr(MapModel map)
+        /// <summary>Liest die Addr-Zeile aus der CSV-Datei der Map und gibt die Adresse zurück (-1 = nicht gefunden).</summary>
+        public static long ParseAddr(MapModel map)
         {
             try
             {

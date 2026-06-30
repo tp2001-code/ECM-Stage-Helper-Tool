@@ -32,6 +32,9 @@ namespace ECM_Stage_Helper_Tool
         private double[,] _clipboard;
         private int _clipboardRows, _clipboardCols;
 
+        // --- Formgröße bei geladener Map ---
+        private Size _normalSize;
+
         public Form1()
         {
             InitializeComponent();
@@ -61,6 +64,44 @@ namespace ECM_Stage_Helper_Tool
         private void MiOpenBin_Click(object sender, EventArgs e) => OpenBin();
         private void MiSaveBin_Click(object sender, EventArgs e) => SaveBin();
 
+        private void MiExportA2l_Click(object sender, EventArgs e)   => RunExport("A2L-Datei exportieren",   "A2L-Dateien|*.a2l|Alle Dateien|*.*", ".a2l",  Exporters.ExportA2l);
+        private void MiExportDamos_Click(object sender, EventArgs e) => RunExport("DAMOS-Datei exportieren", "DAMOS-Dateien|*.dam|Alle Dateien|*.*", ".dam", Exporters.ExportDamos);
+        private void MiExportKp_Click(object sender, EventArgs e)    => RunExport("Kennfeldpaket exportieren","Kennfeldpakete|*.kp|Alle Dateien|*.*", ".kp",  Exporters.ExportKennfeldpaket);
+
+        private void RunExport(string title, string filter, string ext,
+            Action<IEnumerable<MapModel>, string> exportFn)
+        {
+            if (_maps.Count == 0)
+            {
+                MessageBox.Show("Es sind keine Maps geladen.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using (var dlg = new SaveFileDialog())
+            {
+                dlg.Title = title;
+                dlg.Filter = filter;
+                dlg.DefaultExt = ext.TrimStart('.');
+                dlg.FileName = (Path.GetFileName(_csvFolder) ?? "export") + ext;
+                if (_csvFolder != null && Directory.Exists(_csvFolder))
+                    dlg.InitialDirectory = _csvFolder;
+
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+                try
+                {
+                    exportFn(_maps, dlg.FileName);
+                    MessageBox.Show($"Export erfolgreich:\n{dlg.FileName}", "Export",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Fehler beim Export:\n{ex.Message}", "Export-Fehler",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+        }
+
         private void MBearbeiten_DropDownOpening(object sender, EventArgs e)
         {
             bool hasSel = _dgv.SelectedCells.Count > 1 && !_showingOriginal && _currentMap != null;
@@ -76,6 +117,10 @@ namespace ECM_Stage_Helper_Tool
 
         private void Form1_Resize(object sender, EventArgs e)
         {
+            // Normale Größe merken (nur wenn Map geladen, nicht im komprimierten Zustand)
+            if (_currentMap != null)
+                _normalSize = Size;
+
             int menuH = _menuStrip.Height;
             int listW = _lbMaps.Width;
             const int gap = 6;
@@ -89,27 +134,27 @@ namespace ECM_Stage_Helper_Tool
             _lblMapName.Top   = row1Y;
             _lblMapName.Width = gridW;
 
-            // Zeile 2: Einheit | Reset-Buttons | Info-Label | View-Buttons
+            // Zeile 2: Einheit | View-Icons | Reset-Buttons | Info-Label
             int row2Y = row1Y + _lblMapName.Height + 2;
             int btnH  = _btnResetMap.Height;
 
             _lblUnit.Left = gridX;
             _lblUnit.Top  = row2Y + (btnH - _lblUnit.Height) / 2;
 
-            _btnResetMap.Left = gridX + _lblUnit.Width + gap;
+            _btnView2D.Left = gridX + _lblUnit.Width + gap;
+            _btnView2D.Top  = row2Y + (btnH - _btnView2D.Height) / 2;
+            _btnView3D.Left = _btnView2D.Right + 2;
+            _btnView3D.Top  = row2Y + (btnH - _btnView3D.Height) / 2;
+
+            _btnResetMap.Left = _btnView3D.Right + gap;
             _btnResetMap.Top  = row2Y;
 
             _btnResetCell.Left = _btnResetMap.Right + gap;
             _btnResetCell.Top  = row2Y;
 
-            _btnView2D.Left = ClientSize.Width - 74;
-            _btnView2D.Top  = row2Y + (btnH - _btnView2D.Height) / 2;
-            _btnView3D.Left = ClientSize.Width - 38;
-            _btnView3D.Top  = row2Y + (btnH - _btnView3D.Height) / 2;
-
             _lblInfo.Left  = _btnResetCell.Right + gap;
             _lblInfo.Top   = row2Y + (btnH - _lblInfo.Height) / 2;
-            _lblInfo.Width = _btnView2D.Left - _lblInfo.Left - gap;
+            _lblInfo.Width = ClientSize.Width - _lblInfo.Left - gap;
 
             // --- Grid füllt den Rest unterhalb des Info-Bereichs ---
             int gridY = row2Y + btnH + gap;
@@ -208,10 +253,15 @@ namespace ECM_Stage_Helper_Tool
         {
             if (_currentMap == null) return;
             _showingOriginal = !_showingOriginal;
-            RenderMap(_currentMap);
-            UpdateDgvBorderPanel();
             if (_show3D)
+            {
                 _panel3D.SetOriginalView(_showingOriginal);
+            }
+            else
+            {
+                RenderMap(_currentMap);
+                UpdateDgvBorderPanel();
+            }
         }
 
         /// <summary>Erzwingt ein Neuzeichnen des DGV, damit der Außenrahmen aktualisiert wird.</summary>
@@ -391,14 +441,97 @@ namespace ECM_Stage_Helper_Tool
         private void MiCopySel_Click(object sender, EventArgs e)     => ExecuteCopy();
         private void MiPasteSel_Click(object sender, EventArgs e)    => ExecutePaste();
 
+        private void CmiInc_Click(object sender, EventArgs e)
+        {
+            if (_currentMap == null || _showingOriginal) return;
+            var item = sender as System.Windows.Forms.ToolStripMenuItem;
+            if (item == null) return;
+
+            // Prozentwert aus dem Item-Text lesen ("+1 %" → 0.01)
+            string txt = item.Text.Replace("+", "").Replace("%", "").Replace(",", ".").Trim();
+            if (!double.TryParse(txt, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double pct)) return;
+            double factor = 1.0 + pct / 100.0;
+
+            var cells = _dgv.SelectedCells;
+            if (cells.Count == 0) return;
+
+            // Snapshot vor der Änderung
+            var snap = new MapSnapshotUndoAction(new[] { _currentMap });
+
+            foreach (System.Windows.Forms.DataGridViewCell cell in cells)
+            {
+                int r = cell.RowIndex;
+                int c = cell.ColumnIndex;
+                _currentMap.Values[r, c] = _currentMap.Values[r, c] * factor;
+                _currentMap.MarkCellModified(r, c);
+            }
+
+            snap.CaptureAfterState();
+            _undo.Push(snap);
+            RenderMap(_currentMap);
+        }
+
         // -----------------------------------------------------------------------
 
         /// <summary>Beim Programmstart letzten Ordner aus den Einstellungen laden.</summary>
         private void TryLoadLastFolder()
         {
+            BuildRecentFoldersMenu();
             string last = Properties.Settings.Default.LastCsvFolder;
             if (!string.IsNullOrEmpty(last) && Directory.Exists(last))
                 LoadMapsFromFolder(last);
+        }
+
+        private const int MaxRecentFolders = 10;
+
+        /// <summary>Ordner zur Liste der zuletzt verwendeten Ordner hinzufügen und speichern.</summary>
+        private void AddRecentFolder(string folder)
+        {
+            var list = Properties.Settings.Default.RecentFolders
+                       ?? new System.Collections.Specialized.StringCollection();
+
+            // Duplikat entfernen (case-insensitive)
+            for (int i = list.Count - 1; i >= 0; i--)
+                if (string.Equals(list[i], folder, StringComparison.OrdinalIgnoreCase))
+                    list.RemoveAt(i);
+
+            list.Insert(0, folder);
+
+            while (list.Count > MaxRecentFolders)
+                list.RemoveAt(list.Count - 1);
+
+            Properties.Settings.Default.RecentFolders = list;
+            Properties.Settings.Default.Save();
+
+            BuildRecentFoldersMenu();
+        }
+
+        /// <summary>Untermenü "Letzte Ordner" anhand der gespeicherten Liste neu aufbauen.</summary>
+        private void BuildRecentFoldersMenu()
+        {
+            _miRecentFolders.DropDownItems.Clear();
+            var list = Properties.Settings.Default.RecentFolders;
+
+            if (list == null || list.Count == 0)
+            {
+                _miRecentFolders.Enabled = false;
+                return;
+            }
+
+            _miRecentFolders.Enabled = true;
+            foreach (string folder in list)
+            {
+                if (string.IsNullOrEmpty(folder)) continue;
+                string path = folder; // Closure-Kopie
+                var item = new ToolStripMenuItem(path)
+                {
+                    ToolTipText = path,
+                    Enabled = Directory.Exists(path)
+                };
+                item.Click += (s, e) => LoadMapsFromFolder(path);
+                _miRecentFolders.DropDownItems.Add(item);
+            }
         }
 
         /// <summary>
@@ -475,6 +608,7 @@ namespace ECM_Stage_Helper_Tool
 
             Properties.Settings.Default.LastCsvFolder = selected;
             Properties.Settings.Default.Save();
+            AddRecentFolder(selected);
             LoadMapsFromFolder(selected);
         }
 
@@ -517,6 +651,21 @@ namespace ECM_Stage_Helper_Tool
                 if (errors.Count > 0)
                     MessageBox.Show($"Fehler beim Laden einiger CSVs:\n{string.Join("\n", errors)}",
                         "Teilfehler", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+                // Letzte ausgewählte Map wiederherstellen
+                string lastMap = Properties.Settings.Default.LastSelectedMap;
+                if (!string.IsNullOrEmpty(lastMap))
+                {
+                    int idx = _maps.FindIndex(m => m.Name == lastMap);
+                    if (idx >= 0)
+                        _lbMaps.SelectedIndex = idx;
+                    else if (_maps.Count > 0)
+                        _lbMaps.SelectedIndex = 0;
+                }
+                else if (_maps.Count > 0)
+                {
+                    _lbMaps.SelectedIndex = 0;
+                }
             }
             catch (Exception ex)
             {
@@ -534,6 +683,11 @@ namespace ECM_Stage_Helper_Tool
             if (_lbMaps.SelectedIndex < 0) return;
             _showingOriginal = false;
             _currentMap = _maps[_lbMaps.SelectedIndex];
+
+            // Auswahl persistieren
+            Properties.Settings.Default.LastSelectedMap = _currentMap.Name;
+            Properties.Settings.Default.Save();
+
             RenderMap(_currentMap);
             SetUiForMap();
             if (_show3D)
@@ -566,11 +720,25 @@ namespace ECM_Stage_Helper_Tool
             _dgvBin.Visible        = false;
             _lblBinHeader.Visible  = false;
             _btnApplyToBin.Visible = false;
+
+            // Formgröße auf Titelleiste + Menü einschränken
+            int compactH = _menuStrip.Bottom + SystemInformation.FrameBorderSize.Height * 2
+                           + SystemInformation.CaptionHeight;
+            MaximumSize = new Size(0, compactH);   // Breite 0 = unbegrenzt
+            MinimumSize = new Size(300, compactH);
+            Height = compactH;
         }
 
         private void SetUiForMap()
         {
-            _dgv.Visible          = true;
+            // Normale Größe wiederherstellen
+            MaximumSize = Size.Empty;   // keine Einschränkung
+            MinimumSize = new Size(688, 438);
+            if (_normalSize.Width > 0 && _normalSize.Height > 0)
+                Size = _normalSize;
+
+            _dgv.Visible          = !_show3D;
+            _panel3D.Visible      = _show3D;
             _lblInfo.Visible      = true;
             _btnResetMap.Enabled  = true;
             _btnResetCell.Enabled = true;
@@ -582,6 +750,14 @@ namespace ECM_Stage_Helper_Tool
 
         private void RenderMap(MapModel map)
         {
+            // Im 3D-Modus nur das Panel aktualisieren – DGV nicht anfassen
+            if (_show3D)
+            {
+                _panel3D.SetMap(map);
+                _panel3D.SetOriginalView(_showingOriginal);
+                return;
+            }
+
             try
             {
                 using (new DrawingLocker(_dgv))
@@ -599,9 +775,12 @@ namespace ECM_Stage_Helper_Tool
                 // Spalten für X-Achse; Header = X-Wert, grüner Hintergrund
                 for (int c = 0; c < map.Cols; c++)
                 {
+                    string headerText = _showingOriginal
+                        ? map.GetOriginalX(c).ToString(_deDe)
+                        : map.XAxis[c].ToString(_deDe);
                     var col = new DataGridViewTextBoxColumn
                     {
-                        HeaderText = map.XAxis[c].ToString(_deDe),
+                        HeaderText = headerText,
                         Name       = $"C{c}",
                         Width      = 75,
                         SortMode   = DataGridViewColumnSortMode.NotSortable
@@ -616,7 +795,10 @@ namespace ECM_Stage_Helper_Tool
                 for (int r = 0; r < map.Rows; r++)
                 {
                     // Y-Achsenwert im Zeilenkopf – blau hinterlegt
-                    _dgv.Rows[r].HeaderCell.Value = map.YAxis[r].ToString(_deDe);
+                    string rowHeader = _showingOriginal
+                        ? map.GetOriginalY(r).ToString(_deDe)
+                        : map.YAxis[r].ToString(_deDe);
+                    _dgv.Rows[r].HeaderCell.Value = rowHeader;
                     _dgv.Rows[r].HeaderCell.Style.BackColor = Color.FromArgb(210, 225, 255);
                     _dgv.Rows[r].HeaderCell.Style.ForeColor = Color.Black;
 
@@ -1040,6 +1222,7 @@ namespace ECM_Stage_Helper_Tool
                     _lblBinHeader.Visible  = _currentMap != null;
                     _dgvBin.Visible        = _currentMap != null;
                     if (_currentMap != null) RenderBinMap(_currentMap);
+                    Form1_Resize(this, EventArgs.Empty);
                     MessageBox.Show($"BIN geladen:\n{dlg.FileName}", "BIN geöffnet",
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
@@ -1203,10 +1386,17 @@ namespace ECM_Stage_Helper_Tool
             _btnView2D.FlatAppearance.BorderColor = show3D ? Color.FromArgb(60, 63, 65) : Color.DodgerBlue;
             _btnView3D.FlatAppearance.BorderColor = show3D ? Color.DodgerBlue : Color.FromArgb(60, 63, 65);
 
-            if (show3D && _currentMap != null)
+            if (_currentMap == null) return;
+
+            if (show3D)
             {
                 _panel3D.SetMap(_currentMap);
                 _panel3D.SetOriginalView(_showingOriginal);
+            }
+            else
+            {
+                // Zurück zur Tabelle: DGV mit aktuellem Zustand füllen
+                RenderMap(_currentMap);
             }
         }
 

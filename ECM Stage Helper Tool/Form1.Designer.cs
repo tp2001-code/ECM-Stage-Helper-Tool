@@ -27,11 +27,18 @@
             this._miNew = new System.Windows.Forms.ToolStripMenuItem();
             this._miSepNew = new System.Windows.Forms.ToolStripSeparator();
             this._miOpen = new System.Windows.Forms.ToolStripMenuItem();
+            this._miSepRecent = new System.Windows.Forms.ToolStripSeparator();
+            this._miRecentFolders = new System.Windows.Forms.ToolStripMenuItem();
             this._miSave = new System.Windows.Forms.ToolStripMenuItem();
             this._miSepBin = new System.Windows.Forms.ToolStripSeparator();
             this._miOpenBin = new System.Windows.Forms.ToolStripMenuItem();
             this._miSaveBin = new System.Windows.Forms.ToolStripMenuItem();
             this._miSep1 = new System.Windows.Forms.ToolStripSeparator();
+            this._miSepExport = new System.Windows.Forms.ToolStripSeparator();
+            this._miExport = new System.Windows.Forms.ToolStripMenuItem();
+            this._miExportA2l = new System.Windows.Forms.ToolStripMenuItem();
+            this._miExportDamos = new System.Windows.Forms.ToolStripMenuItem();
+            this._miExportKp = new System.Windows.Forms.ToolStripMenuItem();
             this._miExit = new System.Windows.Forms.ToolStripMenuItem();
             this._mBearbeiten = new System.Windows.Forms.ToolStripMenuItem();
             this._miUndo = new System.Windows.Forms.ToolStripMenuItem();
@@ -48,11 +55,18 @@
             this._cmiSepMaps = new System.Windows.Forms.ToolStripSeparator();
             this._cmiSaveAsMod = new System.Windows.Forms.ToolStripMenuItem();
             this._dgv = new ECM_Stage_Helper_Tool.BufferedDataGridView();
-            this._ctxDgv = new System.Windows.Forms.ContextMenuStrip(this.components);
-            this._cmiInterpolate = new System.Windows.Forms.ToolStripMenuItem();
-            this._cmiSepCtx = new System.Windows.Forms.ToolStripSeparator();
-            this._cmiCopySel = new System.Windows.Forms.ToolStripMenuItem();
-            this._cmiPasteSel = new System.Windows.Forms.ToolStripMenuItem();
+            this._ctxDgv         = new System.Windows.Forms.ContextMenuStrip(this.components);
+            this._cmiInterpolate  = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiSepCtx       = new System.Windows.Forms.ToolStripSeparator();
+            this._cmiCopySel      = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiPasteSel     = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiSepIncrease  = new System.Windows.Forms.ToolStripSeparator();
+            this._cmiIncrease     = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiInc1         = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiInc3         = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiInc5         = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiInc7         = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiInc10        = new System.Windows.Forms.ToolStripMenuItem();
             this._panel3D = new ECM_Stage_Helper_Tool.Map3DPanel();
             this._pnlOriginalBorder = new System.Windows.Forms.Panel();
             this._dgvBin = new ECM_Stage_Helper_Tool.BufferedDataGridView();
@@ -92,10 +106,14 @@
             this._miNew,
             this._miSepNew,
             this._miOpen,
+            this._miSepRecent,
+            this._miRecentFolders,
             this._miSave,
             this._miSepBin,
             this._miOpenBin,
             this._miSaveBin,
+            this._miSepExport,
+            this._miExport,
             this._miSep1,
             this._miExit});
             this._mDatei.Name = "_mDatei";
@@ -123,6 +141,17 @@
             this._miOpen.Text = "&Öffnen...";
             this._miOpen.Click += new System.EventHandler(this.MiOpen_Click);
             // 
+            // _miSepRecent
+            // 
+            this._miSepRecent.Name = "_miSepRecent";
+            this._miSepRecent.Size = new System.Drawing.Size(218, 6);
+            // 
+            // _miRecentFolders
+            // 
+            this._miRecentFolders.Name = "_miRecentFolders";
+            this._miRecentFolders.Size = new System.Drawing.Size(221, 22);
+            this._miRecentFolders.Text = "&Letzte Ordner";
+            // 
             // _miSave
             // 
             this._miSave.Name = "_miSave";
@@ -149,6 +178,42 @@
             this._miSaveBin.Size = new System.Drawing.Size(221, 22);
             this._miSaveBin.Text = "BIN &speichern...";
             this._miSaveBin.Click += new System.EventHandler(this.MiSaveBin_Click);
+            // 
+            // _miSepExport
+            // 
+            this._miSepExport.Name = "_miSepExport";
+            this._miSepExport.Size = new System.Drawing.Size(218, 6);
+            // 
+            // _miExport
+            // 
+            this._miExport.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this._miExportA2l,
+            this._miExportDamos,
+            this._miExportKp});
+            this._miExport.Name = "_miExport";
+            this._miExport.Size = new System.Drawing.Size(221, 22);
+            this._miExport.Text = "&Exportieren";
+            // 
+            // _miExportA2l
+            // 
+            this._miExportA2l.Name = "_miExportA2l";
+            this._miExportA2l.Size = new System.Drawing.Size(221, 22);
+            this._miExportA2l.Text = "A2L (mit BIN-Adressen)...";
+            this._miExportA2l.Click += new System.EventHandler(this.MiExportA2l_Click);
+            // 
+            // _miExportDamos
+            // 
+            this._miExportDamos.Name = "_miExportDamos";
+            this._miExportDamos.Size = new System.Drawing.Size(221, 22);
+            this._miExportDamos.Text = "DAMOS (.dam)...";
+            this._miExportDamos.Click += new System.EventHandler(this.MiExportDamos_Click);
+            // 
+            // _miExportKp
+            // 
+            this._miExportKp.Name = "_miExportKp";
+            this._miExportKp.Size = new System.Drawing.Size(221, 22);
+            this._miExportKp.Text = "Kennfeldpaket (.kp)...";
+            this._miExportKp.Click += new System.EventHandler(this.MiExportKp_Click);
             // 
             // _miSep1
             // 
@@ -309,7 +374,9 @@
             this._cmiInterpolate,
             this._cmiSepCtx,
             this._cmiCopySel,
-            this._cmiPasteSel});
+            this._cmiPasteSel,
+            this._cmiSepIncrease,
+            this._cmiIncrease});
             this._ctxDgv.Name = "_ctxDgv";
             this._ctxDgv.Size = new System.Drawing.Size(166, 76);
             this._ctxDgv.Opening += new System.ComponentModel.CancelEventHandler(this.CtxDgv_Opening);
@@ -341,6 +408,52 @@
             this._cmiPasteSel.Size = new System.Drawing.Size(165, 22);
             this._cmiPasteSel.Text = "&Einfügen";
             this._cmiPasteSel.Click += new System.EventHandler(this.MiPasteSel_Click);
+            // 
+            // _cmiSepIncrease
+            // 
+            this._cmiSepIncrease.Name = "_cmiSepIncrease";
+            this._cmiSepIncrease.Size = new System.Drawing.Size(162, 6);
+            // 
+            // _cmiIncrease
+            // 
+            this._cmiIncrease.Name = "_cmiIncrease";
+            this._cmiIncrease.Text = "Markierte erhöhen";
+            this._cmiIncrease.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+                this._cmiInc1,
+                this._cmiInc3,
+                this._cmiInc5,
+                this._cmiInc7,
+                this._cmiInc10});
+            // 
+            // _cmiInc1
+            // 
+            this._cmiInc1.Name = "_cmiInc1";
+            this._cmiInc1.Text = "+1 %";
+            this._cmiInc1.Click += new System.EventHandler(this.CmiInc_Click);
+            // 
+            // _cmiInc3
+            // 
+            this._cmiInc3.Name = "_cmiInc3";
+            this._cmiInc3.Text = "+3 %";
+            this._cmiInc3.Click += new System.EventHandler(this.CmiInc_Click);
+            // 
+            // _cmiInc5
+            // 
+            this._cmiInc5.Name = "_cmiInc5";
+            this._cmiInc5.Text = "+5 %";
+            this._cmiInc5.Click += new System.EventHandler(this.CmiInc_Click);
+            // 
+            // _cmiInc7
+            // 
+            this._cmiInc7.Name = "_cmiInc7";
+            this._cmiInc7.Text = "+7,5 %";
+            this._cmiInc7.Click += new System.EventHandler(this.CmiInc_Click);
+            // 
+            // _cmiInc10
+            // 
+            this._cmiInc10.Name = "_cmiInc10";
+            this._cmiInc10.Text = "+10 %";
+            this._cmiInc10.Click += new System.EventHandler(this.CmiInc_Click);
             // 
             // _panel3D
             // 
@@ -554,11 +667,18 @@
         private System.Windows.Forms.ToolStripMenuItem _miNew;
         private System.Windows.Forms.ToolStripSeparator _miSepNew;
         private System.Windows.Forms.ToolStripMenuItem _miOpen;
+        private System.Windows.Forms.ToolStripSeparator _miSepRecent;
+        private System.Windows.Forms.ToolStripMenuItem  _miRecentFolders;
         private System.Windows.Forms.ToolStripMenuItem _miSave;
         private System.Windows.Forms.ToolStripSeparator _miSepBin;
         private System.Windows.Forms.ToolStripMenuItem _miOpenBin;
         private System.Windows.Forms.ToolStripMenuItem _miSaveBin;
         private System.Windows.Forms.ToolStripSeparator _miSep1;
+        private System.Windows.Forms.ToolStripSeparator _miSepExport;
+        private System.Windows.Forms.ToolStripMenuItem  _miExport;
+        private System.Windows.Forms.ToolStripMenuItem  _miExportA2l;
+        private System.Windows.Forms.ToolStripMenuItem  _miExportDamos;
+        private System.Windows.Forms.ToolStripMenuItem  _miExportKp;
         private System.Windows.Forms.ToolStripMenuItem _miExit;
         private System.Windows.Forms.ToolStripMenuItem _mBearbeiten;
         private System.Windows.Forms.ToolStripMenuItem _miUndo;
@@ -586,6 +706,13 @@
         private System.Windows.Forms.ToolStripSeparator _cmiSepCtx;
         private System.Windows.Forms.ToolStripMenuItem  _cmiCopySel;
         private System.Windows.Forms.ToolStripMenuItem  _cmiPasteSel;
+        private System.Windows.Forms.ToolStripSeparator _cmiSepIncrease;
+        private System.Windows.Forms.ToolStripMenuItem  _cmiIncrease;
+        private System.Windows.Forms.ToolStripMenuItem  _cmiInc1;
+        private System.Windows.Forms.ToolStripMenuItem  _cmiInc3;
+        private System.Windows.Forms.ToolStripMenuItem  _cmiInc5;
+        private System.Windows.Forms.ToolStripMenuItem  _cmiInc7;
+        private System.Windows.Forms.ToolStripMenuItem  _cmiInc10;
         private ECM_Stage_Helper_Tool.BufferedDataGridView _dgvBin;
         private System.Windows.Forms.Label            _lblBinHeader;
         private System.Windows.Forms.Button           _btnApplyToBin;

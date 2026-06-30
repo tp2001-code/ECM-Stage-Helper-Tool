@@ -35,5 +35,22 @@ namespace ECM_Stage_Helper_Tool.Properties
             get { return ((string)(this["LastCsvFolder"])); }
             set { this["LastCsvFolder"] = value; }
         }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string LastSelectedMap
+        {
+            get { return ((string)(this["LastSelectedMap"])); }
+            set { this["LastSelectedMap"] = value; }
+        }
+
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        public System.Collections.Specialized.StringCollection RecentFolders
+        {
+            get { return ((System.Collections.Specialized.StringCollection)(this["RecentFolders"])); }
+            set { this["RecentFolders"] = value; }
+        }
     }
 }
