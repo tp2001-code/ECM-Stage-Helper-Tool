@@ -35,6 +35,11 @@ namespace ECM_Stage_Helper_Tool
         // --- Formgröße bei geladener Map ---
         private Size _normalSize;
 
+        // --- +/- Zellen-Schritt (Undo-Batching bei gehaltenem Tastendruck) ---
+        private bool   _stepPending;
+        private int    _stepPendingRow, _stepPendingCol;
+        private double _stepBaseValue;
+
         public Form1()
         {
             InitializeComponent();
@@ -47,6 +52,7 @@ namespace ECM_Stage_Helper_Tool
             _miUndo.Enabled    = false;
             _miRedo.Enabled    = false;
             _miSaveBin.Enabled = false;
+            _dgv.KeyUp += Dgv_KeyUp;
             TryLoadLastFolder();
             if (_currentMap == null) SetUiForNoMap();
         }
@@ -244,6 +250,21 @@ namespace ECM_Stage_Helper_Tool
             if (keyData == (Keys.Control | Keys.Y) && !_dgv.IsCurrentCellInEditMode)
             {
                 ExecuteRedo();
+                return true;
+            }
+            // A: 3D-/HEX-Ansicht umschalten
+            if (keyData == Keys.A && _currentMap != null && !_dgv.IsCurrentCellInEditMode)
+            {
+                Switch3D(!_show3D);
+                return true;
+            }
+            // + / -: ausgewählte Zelle um 1 erhöhen / verringern
+            bool isPlus  = keyData == Keys.Add      || keyData == Keys.Oemplus;
+            bool isMinus = keyData == Keys.Subtract || keyData == Keys.OemMinus;
+            if ((isPlus || isMinus) && _currentMap != null && !_dgv.IsCurrentCellInEditMode
+                && !_show3D && !_showingOriginal && _dgv.ContainsFocus)
+            {
+                StepCell(isPlus ? +1 : -1);
                 return true;
             }
             return base.ProcessCmdKey(ref msg, keyData);
@@ -835,6 +856,47 @@ namespace ECM_Stage_Helper_Tool
                 MessageBox.Show($"Fehler beim Rendern: {ex.Message}", "Fehler",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private void StepCell(int delta)
+        {
+            if (_dgv.CurrentCell == null) return;
+            int row = _dgv.CurrentCell.RowIndex;
+            int col = _dgv.CurrentCell.ColumnIndex;
+            if (row < 0 || col < 0) return;
+
+            double oldValue = _currentMap.Values[row, col];
+
+            // Neue Sequenz beginnen (andere Zelle oder erstes Drücken)
+            if (!_stepPending || _stepPendingRow != row || _stepPendingCol != col)
+            {
+                _stepPending    = true;
+                _stepPendingRow = row;
+                _stepPendingCol = col;
+                _stepBaseValue  = oldValue;
+            }
+
+            _currentMap.Values[row, col] = oldValue + delta;
+            _currentMap.MarkCellModified(row, col);
+            RefreshCell(row, col);
+            if (_binFlash != null) RenderBinMap(_currentMap);
+        }
+
+        private void CommitStep()
+        {
+            if (!_stepPending) return;
+            _stepPending = false;
+            if (_currentMap == null) return;
+            double finalValue = _currentMap.Values[_stepPendingRow, _stepPendingCol];
+            if (Math.Abs(finalValue - _stepBaseValue) >= 1e-12)
+                _undo.Push(new CellUndoAction(_currentMap, _stepPendingRow, _stepPendingCol, _stepBaseValue, finalValue));
+        }
+
+        private void Dgv_KeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Add      || e.KeyCode == Keys.Oemplus ||
+                e.KeyCode == Keys.Subtract || e.KeyCode == Keys.OemMinus)
+                CommitStep();
         }
 
         private void RefreshCell(int row, int col)
