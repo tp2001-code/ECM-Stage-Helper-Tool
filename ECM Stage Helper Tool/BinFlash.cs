@@ -146,6 +146,28 @@ namespace ECM_Stage_Helper_Tool
             return true;
         }
 
+        /// <summary>
+        /// Liest alle Kennfeldwerte aus dem BIN und schreibt sie in <see cref="MapModel.Values"/>.
+        /// Zellen werden als geändert markiert wenn der BIN-Wert vom CSV-Originalwert abweicht.
+        /// Gibt false zurück wenn keine Adresse vorhanden oder die Adresse außerhalb liegt.
+        /// </summary>
+        public bool ReadMapValuesIntoMap(MapModel map)
+        {
+            double[,] binValues = ReadMapValues(map);
+            if (binValues == null) return false;
+
+            for (int r = 0; r < map.Rows; r++)
+                for (int c = 0; c < map.Cols; c++)
+                {
+                    map.Values[r, c] = binValues[r, c];
+                    if (Math.Abs(map.GetOriginalValue(r, c) - binValues[r, c]) > 1e-9)
+                        map.MarkCellModified(r, c);
+                    else
+                        map.UnmarkCell(r, c);
+                }
+            return true;
+        }
+
         // -----------------------------------------------------------------------
         // Hilfsmethoden
         // -----------------------------------------------------------------------

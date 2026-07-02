@@ -1,0 +1,352 @@
+﻿namespace ECM_Stage_Helper_Tool.AiRemap
+{
+    partial class AiRemapWizard
+    {
+        private System.ComponentModel.IContainer components = null;
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && (components != null)) components.Dispose();
+            base.Dispose(disposing);
+        }
+        private void InitializeComponent()
+        {
+            this._lblStep            = new System.Windows.Forms.Label();
+            this._progressBar        = new System.Windows.Forms.ProgressBar();
+            this._lblStatus          = new System.Windows.Forms.Label();
+            this._panStep1           = new System.Windows.Forms.Panel();
+            this._lblStep1Title      = new System.Windows.Forms.Label();
+            this._lblStep1Info       = new System.Windows.Forms.Label();
+            this._btnAnalyse         = new System.Windows.Forms.Button();
+            this._btnCancelWizard    = new System.Windows.Forms.Button();
+            this._panStep2           = new System.Windows.Forms.Panel();
+            this._panStep2Scroll     = new System.Windows.Forms.Panel();
+            this._lblStep2Title      = new System.Windows.Forms.Label();
+            this._lblMaxFuelLbl      = new System.Windows.Forms.Label();
+            this._lblMaxFuel         = new System.Windows.Forms.Label();
+            this._lblMaxPowerLbl     = new System.Windows.Forms.Label();
+            this._lblMaxPower        = new System.Windows.Forms.Label();
+            this._lblMaxNmLbl        = new System.Windows.Forms.Label();
+            this._lblMaxNm           = new System.Windows.Forms.Label();
+            this._lblSummaryLbl      = new System.Windows.Forms.Label();
+            this._lblSummary         = new System.Windows.Forms.Label();
+            this._lblMapsLbl         = new System.Windows.Forms.Label();
+            this._lstMapsToChange    = new System.Windows.Forms.ListBox();
+            this._lblTargetFuelLbl   = new System.Windows.Forms.Label();
+            this._numTargetFuel      = new System.Windows.Forms.NumericUpDown();
+            this._lblFuelUnit        = new System.Windows.Forms.Label();
+            this._lblExpPowerLbl     = new System.Windows.Forms.Label();
+            this._lblExpPower        = new System.Windows.Forms.Label();
+            this._lblExpNmLbl        = new System.Windows.Forms.Label();
+            this._lblExpNm           = new System.Windows.Forms.Label();
+            this._panStep2Btns       = new System.Windows.Forms.Panel();
+            this._btnBack2           = new System.Windows.Forms.Button();
+            this._btnConfirmTarget   = new System.Windows.Forms.Button();
+            this._panStep3           = new System.Windows.Forms.Panel();
+            this._lblStep3Title      = new System.Windows.Forms.Label();
+            this._lblConfirmInfo     = new System.Windows.Forms.Label();
+            this._lstConfirm         = new System.Windows.Forms.ListBox();
+            this._panStep3Btns       = new System.Windows.Forms.Panel();
+            this._btnBack3           = new System.Windows.Forms.Button();
+            this._btnExecuteRemap    = new System.Windows.Forms.Button();
+            this.SuspendLayout();
+            // Form
+            this.ClientSize      = new System.Drawing.Size(680, 720);
+            this.MinimumSize     = new System.Drawing.Size(580, 640);
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.Sizable;
+            this.MaximizeBox     = false;
+            this.StartPosition   = System.Windows.Forms.FormStartPosition.CenterParent;
+            this.Text            = "KI-Remap (Claude)";
+            // Kopfzeile
+            this._lblStep.Location  = new System.Drawing.Point(12, 8);
+            this._lblStep.Size      = new System.Drawing.Size(200, 20);
+            this._lblStep.Font      = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this._lblStep.Anchor    = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left;
+            this._lblStep.Text      = "Schritt 1 von 3";
+            this._progressBar.Location = new System.Drawing.Point(220, 10);
+            this._progressBar.Size     = new System.Drawing.Size(300, 16);
+            this._progressBar.Anchor   = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            this._progressBar.Style    = System.Windows.Forms.ProgressBarStyle.Marquee;
+            this._progressBar.Visible  = false;
+            this._lblStatus.Location   = new System.Drawing.Point(530, 8);
+            this._lblStatus.Size       = new System.Drawing.Size(140, 20);
+            this._lblStatus.Anchor     = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right;
+            this._lblStatus.ForeColor  = System.Drawing.Color.Gray;
+            // Schritt 1
+            this._panStep1.Location = new System.Drawing.Point(0, 34);
+            this._panStep1.Anchor   = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            this._panStep1.Size     = new System.Drawing.Size(680, 686);
+            this._lblStep1Title.Location = new System.Drawing.Point(12, 12);
+            this._lblStep1Title.Size     = new System.Drawing.Size(650, 32);
+            this._lblStep1Title.Text     = "Schritt 1 - Maps analysieren";
+            this._lblStep1Title.Font     = new System.Drawing.Font("Segoe UI", 13F, System.Drawing.FontStyle.Bold);
+            this._lblStep1Info.Location  = new System.Drawing.Point(12, 56);
+            this._lblStep1Info.Size      = new System.Drawing.Size(650, 80);
+            this._lblStep1Info.AutoSize  = false;
+            this._lblStep1Info.Text      = "Alle geladenen CSV-Maps werden an Claude gesendet.\nClaude ermittelt die max. Einspritzmenge, Leistung und Drehmoment.";
+            this._btnAnalyse.Location    = new System.Drawing.Point(12, 152);
+            this._btnAnalyse.Size        = new System.Drawing.Size(200, 38);
+            this._btnAnalyse.Text        = "Maps analysieren >>";
+            this._btnAnalyse.Font        = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
+            this._btnAnalyse.BackColor   = System.Drawing.Color.SteelBlue;
+            this._btnAnalyse.ForeColor   = System.Drawing.Color.White;
+            this._btnAnalyse.FlatStyle   = System.Windows.Forms.FlatStyle.Flat;
+            this._btnAnalyse.Click      += new System.EventHandler(this.BtnAnalyse_Click);
+            this._btnCancelWizard.Location = new System.Drawing.Point(12, 640);
+            this._btnCancelWizard.Size     = new System.Drawing.Size(100, 28);
+            this._btnCancelWizard.Anchor   = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left;
+            this._btnCancelWizard.Text     = "Abbrechen";
+            this._btnCancelWizard.Click   += new System.EventHandler(this.BtnCancelWizard_Click);
+            this._panStep1.Controls.AddRange(new System.Windows.Forms.Control[] { this._lblStep1Title, this._lblStep1Info, this._btnAnalyse, this._btnCancelWizard });
+            // Schritt 2
+            this._panStep2.Location = new System.Drawing.Point(0, 34);
+            this._panStep2.Anchor   = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            this._panStep2.Size     = new System.Drawing.Size(680, 686);
+            this._panStep2.Visible  = false;
+            this._panStep2Scroll.Location   = new System.Drawing.Point(0, 0);
+            this._panStep2Scroll.Anchor     = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            this._panStep2Scroll.Size       = new System.Drawing.Size(680, 642);
+            this._panStep2Scroll.AutoScroll = true;
+            this._lblStep2Title.Location = new System.Drawing.Point(12, 12);
+            this._lblStep2Title.Size     = new System.Drawing.Size(640, 32);
+            this._lblStep2Title.Text     = "Schritt 2 - Analyseergebnis und Zielwert";
+            this._lblStep2Title.Font     = new System.Drawing.Font("Segoe UI", 13F, System.Drawing.FontStyle.Bold);
+            int y = 56;
+            AddLabelPair(this._panStep2Scroll, this._lblMaxFuelLbl,  "Max. Einspritzmenge:", this._lblMaxFuel,  ref y);
+            AddLabelPair(this._panStep2Scroll, this._lblMaxPowerLbl, "Max. Leistung:",       this._lblMaxPower, ref y);
+            AddLabelPair(this._panStep2Scroll, this._lblMaxNmLbl,    "Max. Drehmoment:",     this._lblMaxNm,    ref y);
+            this._lblSummaryLbl.Location = new System.Drawing.Point(12, y);
+            this._lblSummaryLbl.Size     = new System.Drawing.Size(640, 18);
+            this._lblSummaryLbl.Text     = "Analyse-Zusammenfassung:";
+            this._lblSummaryLbl.Font     = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            y += 22;
+            this._lblSummary.Location    = new System.Drawing.Point(12, y);
+            this._lblSummary.Size        = new System.Drawing.Size(640, 60);
+            this._lblSummary.AutoSize    = false;
+            y += 66;
+            this._lblMapsLbl.Location    = new System.Drawing.Point(12, y);
+            this._lblMapsLbl.Size        = new System.Drawing.Size(640, 18);
+            this._lblMapsLbl.Text        = "Maps die angepasst werden:";
+            this._lblMapsLbl.Font        = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            y += 22;
+            this._lstMapsToChange.Location      = new System.Drawing.Point(12, y);
+            this._lstMapsToChange.Size          = new System.Drawing.Size(640, 80);
+            this._lstMapsToChange.SelectionMode = System.Windows.Forms.SelectionMode.None;
+            y += 88;
+            this._lblTargetFuelLbl.Location    = new System.Drawing.Point(12, y);
+            this._lblTargetFuelLbl.Size        = new System.Drawing.Size(200, 24);
+            this._lblTargetFuelLbl.Text        = "Ziel-Einspritzmenge:";
+            this._lblTargetFuelLbl.Font        = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this._numTargetFuel.Location       = new System.Drawing.Point(216, y);
+            this._numTargetFuel.Size           = new System.Drawing.Size(110, 24);
+            this._numTargetFuel.Minimum        = 1;
+            this._numTargetFuel.Maximum        = 9999;
+            this._numTargetFuel.DecimalPlaces  = 1;
+            this._numTargetFuel.Increment      = (decimal)0.5;
+            this._numTargetFuel.ValueChanged  += new System.EventHandler(this.NumTargetFuel_ValueChanged);
+            this._lblFuelUnit.Location         = new System.Drawing.Point(332, y + 2);
+            this._lblFuelUnit.Size             = new System.Drawing.Size(80, 22);
+            this._lblFuelUnit.Text             = "mm3/Stk";
+            y += 32;
+            AddLabelPair(this._panStep2Scroll, this._lblExpPowerLbl, "Erwartete Leistung:", this._lblExpPower, ref y);
+            AddLabelPair(this._panStep2Scroll, this._lblExpNmLbl,    "Erw. Drehmoment:",    this._lblExpNm,    ref y);
+            this._lblExpPower.ForeColor = System.Drawing.Color.DarkGreen;
+            this._lblExpPower.Font      = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this._lblExpNm.ForeColor    = System.Drawing.Color.DarkGreen;
+            this._lblExpNm.Font         = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            y += 10;
+            var sep = new System.Windows.Forms.Label();
+            sep.Location    = new System.Drawing.Point(12, y);
+            sep.Size        = new System.Drawing.Size(640, 2);
+            sep.BorderStyle = System.Windows.Forms.BorderStyle.Fixed3D;
+            y += 12;
+            var limTitle = new System.Windows.Forms.Label();
+            limTitle.Location = new System.Drawing.Point(12, y);
+            limTitle.Size     = new System.Drawing.Size(640, 18);
+            limTitle.Text     = "Neue Hardware-Limits:";
+            limTitle.Font     = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            y += 26;
+            this._lblLimitBoostLbl  = new System.Windows.Forms.Label();
+            this._lblCurrentBoost   = new System.Windows.Forms.Label();
+            this._numLimitBoost     = new System.Windows.Forms.NumericUpDown();
+            AddLimitRow(this._panStep2Scroll, this._lblLimitBoostLbl, "Max. Ladedruck:",  this._lblCurrentBoost, this._numLimitBoost, "hPa", 0, 5000, ref y);
+            this._lblLimitRailLbl   = new System.Windows.Forms.Label();
+            this._lblCurrentRail    = new System.Windows.Forms.Label();
+            this._numLimitRail      = new System.Windows.Forms.NumericUpDown();
+            AddLimitRow(this._panStep2Scroll, this._lblLimitRailLbl,  "Max. Raildruck:",  this._lblCurrentRail,  this._numLimitRail,  "bar", 0, 2500, ref y);
+            this._lblLimitNmLbl     = new System.Windows.Forms.Label();
+            this._lblCurrentNm      = new System.Windows.Forms.Label();
+            this._numLimitNm        = new System.Windows.Forms.NumericUpDown();
+            AddLimitRow(this._panStep2Scroll, this._lblLimitNmLbl,    "Max. Drehmoment:", this._lblCurrentNm,    this._numLimitNm,    "Nm",  0, 1000, ref y);
+            this._panStep2Scroll.Controls.AddRange(new System.Windows.Forms.Control[] {
+                this._lblStep2Title,
+                this._lblMaxFuelLbl, this._lblMaxFuel, this._lblMaxPowerLbl, this._lblMaxPower, this._lblMaxNmLbl, this._lblMaxNm,
+                this._lblSummaryLbl, this._lblSummary, this._lblMapsLbl, this._lstMapsToChange,
+                this._lblTargetFuelLbl, this._numTargetFuel, this._lblFuelUnit,
+                this._lblExpPowerLbl, this._lblExpPower, this._lblExpNmLbl, this._lblExpNm,
+                sep, limTitle,
+                this._lblLimitBoostLbl, this._lblCurrentBoost, this._numLimitBoost,
+                this._lblLimitRailLbl,  this._lblCurrentRail,  this._numLimitRail,
+                this._lblLimitNmLbl,    this._lblCurrentNm,    this._numLimitNm });
+            this._panStep2Btns.Location  = new System.Drawing.Point(0, 642);
+            this._panStep2Btns.Size      = new System.Drawing.Size(680, 44);
+            this._panStep2Btns.Anchor    = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            this._panStep2Btns.BackColor = System.Drawing.SystemColors.Control;
+            this._btnBack2.Location  = new System.Drawing.Point(8, 8);
+            this._btnBack2.Size      = new System.Drawing.Size(90, 28);
+            this._btnBack2.Text      = "<< Zurueck";
+            this._btnBack2.Click    += new System.EventHandler(this.BtnBack2_Click);
+            this._btnConfirmTarget.Location  = new System.Drawing.Point(470, 8);
+            this._btnConfirmTarget.Size      = new System.Drawing.Size(200, 28);
+            this._btnConfirmTarget.Anchor    = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right;
+            this._btnConfirmTarget.Text      = "Weiter >>";
+            this._btnConfirmTarget.Font      = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this._btnConfirmTarget.BackColor = System.Drawing.Color.SteelBlue;
+            this._btnConfirmTarget.ForeColor = System.Drawing.Color.White;
+            this._btnConfirmTarget.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this._btnConfirmTarget.Click    += new System.EventHandler(this.BtnConfirmTarget_Click);
+            this._panStep2Btns.Controls.AddRange(new System.Windows.Forms.Control[] { this._btnBack2, this._btnConfirmTarget });
+            this._panStep2.Controls.AddRange(new System.Windows.Forms.Control[] { this._panStep2Scroll, this._panStep2Btns });
+            // Schritt 3
+            this._panStep3.Location = new System.Drawing.Point(0, 34);
+            this._panStep3.Anchor   = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            this._panStep3.Size     = new System.Drawing.Size(680, 686);
+            this._panStep3.Visible  = false;
+            this._lblStep3Title.Location = new System.Drawing.Point(12, 12);
+            this._lblStep3Title.Size     = new System.Drawing.Size(650, 32);
+            this._lblStep3Title.Text     = "Schritt 3 - Remap bestaetigen und ausfuehren";
+            this._lblStep3Title.Font     = new System.Drawing.Font("Segoe UI", 13F, System.Drawing.FontStyle.Bold);
+            this._lblConfirmInfo.Location = new System.Drawing.Point(12, 56);
+            this._lblConfirmInfo.Size     = new System.Drawing.Size(650, 60);
+            this._lblConfirmInfo.AutoSize = false;
+            this._lblConfirmInfo.Text     = "Claude berechnet die neuen Map-Werte. Aenderungen werden temporaer (rot markiert) eingetragen.\nDanach pruefen und ueber Datei >> Alle CSV speichern oder BIN schreiben.";
+            this._lstConfirm.Location      = new System.Drawing.Point(12, 128);
+            this._lstConfirm.Anchor        = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            this._lstConfirm.Size          = new System.Drawing.Size(650, 460);
+            this._lstConfirm.SelectionMode = System.Windows.Forms.SelectionMode.None;
+            this._panStep3Btns.Location  = new System.Drawing.Point(0, 642);
+            this._panStep3Btns.Size      = new System.Drawing.Size(680, 44);
+            this._panStep3Btns.Anchor    = System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
+            this._panStep3Btns.BackColor = System.Drawing.SystemColors.Control;
+            this._btnBack3.Location  = new System.Drawing.Point(8, 8);
+            this._btnBack3.Size      = new System.Drawing.Size(90, 28);
+            this._btnBack3.Text      = "<< Zurueck";
+            this._btnBack3.Click    += new System.EventHandler(this.BtnBack3_Click);
+            this._btnExecuteRemap.Location  = new System.Drawing.Point(436, 8);
+            this._btnExecuteRemap.Size      = new System.Drawing.Size(234, 28);
+            this._btnExecuteRemap.Anchor    = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right;
+            this._btnExecuteRemap.Text      = "Jetzt berechnen und anwenden >>";
+            this._btnExecuteRemap.Font      = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this._btnExecuteRemap.BackColor = System.Drawing.Color.DarkGreen;
+            this._btnExecuteRemap.ForeColor = System.Drawing.Color.White;
+            this._btnExecuteRemap.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this._btnExecuteRemap.Click    += new System.EventHandler(this.BtnExecuteRemap_Click);
+            this._panStep3Btns.Controls.AddRange(new System.Windows.Forms.Control[] { this._btnBack3, this._btnExecuteRemap });
+            this._panStep3.Controls.AddRange(new System.Windows.Forms.Control[] { this._lblStep3Title, this._lblConfirmInfo, this._lstConfirm, this._panStep3Btns });
+            this.Controls.AddRange(new System.Windows.Forms.Control[] { this._lblStep, this._progressBar, this._lblStatus, this._panStep1, this._panStep2, this._panStep3 });
+            this.ResumeLayout(false);
+        }
+        private static void AddLabelPair(System.Windows.Forms.Control parent, System.Windows.Forms.Label lbl, string caption, System.Windows.Forms.Label val, ref int y)
+        {
+            lbl.Location = new System.Drawing.Point(12, y);
+            lbl.Size     = new System.Drawing.Size(200, 22);
+            lbl.Text     = caption;
+            lbl.Font     = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            val.Location = new System.Drawing.Point(216, y);
+            val.Size     = new System.Drawing.Size(450, 22);
+            val.Text     = "-";
+            y += 28;
+            parent.Controls.Add(lbl);
+            parent.Controls.Add(val);
+        }
+        private static void AddLimitRow(System.Windows.Forms.Control parent, System.Windows.Forms.Label lbl, string caption, System.Windows.Forms.Label lblCurrent, System.Windows.Forms.NumericUpDown num, string unit, int min, int max, ref int y)
+        {
+            // Zeile 1: Bezeichnung + aktueller Istwert (viel Platz, nicht verdeckt)
+            lbl.Location     = new System.Drawing.Point(12, y);
+            lbl.Size         = new System.Drawing.Size(180, 20);
+            lbl.Text         = caption;
+            lbl.Font         = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            lblCurrent.Location  = new System.Drawing.Point(200, y);
+            lblCurrent.Size      = new System.Drawing.Size(460, 20);
+            lblCurrent.Text      = "(aktuell: wird nach Analyse befuellt)";
+            lblCurrent.ForeColor = System.Drawing.Color.Gray;
+            y += 26;
+            // Zeile 2: Eingabefeld eingerueckt
+            var lblNew = new System.Windows.Forms.Label();
+            lblNew.Location  = new System.Drawing.Point(28, y);
+            lblNew.Size      = new System.Drawing.Size(110, 22);
+            lblNew.Text      = "Neues Limit:";
+            lblNew.ForeColor = System.Drawing.Color.Silver;
+            num.Location      = new System.Drawing.Point(144, y);
+            num.Size          = new System.Drawing.Size(110, 22);
+            num.Minimum       = min;
+            num.Maximum       = max;
+            num.DecimalPlaces = 0;
+            num.Value         = 0;
+            var lblUnit = new System.Windows.Forms.Label();
+            lblUnit.Location  = new System.Drawing.Point(260, y + 2);
+            lblUnit.Size      = new System.Drawing.Size(50, 18);
+            lblUnit.Text      = unit;
+            lblUnit.ForeColor = System.Drawing.Color.Gray;
+            var lblHint = new System.Windows.Forms.Label();
+            lblHint.Location  = new System.Drawing.Point(316, y + 3);
+            lblHint.Size      = new System.Drawing.Size(340, 16);
+            lblHint.Text      = "(0 = proportional skalieren, kein hartes Limit)";
+            lblHint.ForeColor = System.Drawing.Color.DimGray;
+            lblHint.Font      = new System.Drawing.Font("Segoe UI", 7.5F);
+            y += 38;
+            parent.Controls.Add(lbl);
+            parent.Controls.Add(lblCurrent);
+            parent.Controls.Add(lblNew);
+            parent.Controls.Add(num);
+            parent.Controls.Add(lblUnit);
+            parent.Controls.Add(lblHint);
+        }
+        private System.Windows.Forms.Label _lblStep;
+        private System.Windows.Forms.ProgressBar _progressBar;
+        private System.Windows.Forms.Label _lblStatus;
+        private System.Windows.Forms.Panel _panStep1;
+        private System.Windows.Forms.Label _lblStep1Title;
+        private System.Windows.Forms.Label _lblStep1Info;
+        private System.Windows.Forms.Button _btnAnalyse;
+        private System.Windows.Forms.Button _btnCancelWizard;
+        private System.Windows.Forms.Panel _panStep2;
+        private System.Windows.Forms.Panel _panStep2Scroll;
+        private System.Windows.Forms.Label _lblStep2Title;
+        private System.Windows.Forms.Label _lblMaxFuelLbl;
+        private System.Windows.Forms.Label _lblMaxFuel;
+        private System.Windows.Forms.Label _lblMaxPowerLbl;
+        private System.Windows.Forms.Label _lblMaxPower;
+        private System.Windows.Forms.Label _lblMaxNmLbl;
+        private System.Windows.Forms.Label _lblMaxNm;
+        private System.Windows.Forms.Label _lblSummaryLbl;
+        private System.Windows.Forms.Label _lblSummary;
+        private System.Windows.Forms.Label _lblMapsLbl;
+        private System.Windows.Forms.ListBox _lstMapsToChange;
+        private System.Windows.Forms.Label _lblTargetFuelLbl;
+        private System.Windows.Forms.NumericUpDown _numTargetFuel;
+        private System.Windows.Forms.Label _lblFuelUnit;
+        private System.Windows.Forms.Label _lblExpPowerLbl;
+        private System.Windows.Forms.Label _lblExpPower;
+        private System.Windows.Forms.Label _lblExpNmLbl;
+        private System.Windows.Forms.Label _lblExpNm;
+        private System.Windows.Forms.Panel _panStep2Btns;
+        private System.Windows.Forms.Button _btnBack2;
+        private System.Windows.Forms.Button _btnConfirmTarget;
+        private System.Windows.Forms.Label _lblLimitBoostLbl;
+        private System.Windows.Forms.Label _lblCurrentBoost;
+        private System.Windows.Forms.NumericUpDown _numLimitBoost;
+        private System.Windows.Forms.Label _lblLimitRailLbl;
+        private System.Windows.Forms.Label _lblCurrentRail;
+        private System.Windows.Forms.NumericUpDown _numLimitRail;
+        private System.Windows.Forms.Label _lblLimitNmLbl;
+        private System.Windows.Forms.Label _lblCurrentNm;
+        private System.Windows.Forms.NumericUpDown _numLimitNm;
+        private System.Windows.Forms.Panel _panStep3;
+        private System.Windows.Forms.Label _lblStep3Title;
+        private System.Windows.Forms.Label _lblConfirmInfo;
+        private System.Windows.Forms.ListBox _lstConfirm;
+        private System.Windows.Forms.Panel _panStep3Btns;
+        private System.Windows.Forms.Button _btnBack3;
+        private System.Windows.Forms.Button _btnExecuteRemap;
+    }
+}

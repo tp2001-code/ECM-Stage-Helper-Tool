@@ -22,6 +22,7 @@ namespace ECM_Stage_Helper_Tool
 
         private Point  _lastMouse;
         private bool   _dragging;
+        private PointF[,] _lastProj; // Cache der letzten Projektion fuer Hit-Test
 
         // -----------------------------------------------------------------------
         // Daten
@@ -29,6 +30,15 @@ namespace ECM_Stage_Helper_Tool
         private MapModel _map;
         private double   _minVal, _maxVal;
         private bool     _showOriginal;
+
+        // Selektiertes Face (obere-linke Ecke des Quadrats)
+        private int _selRow = -1;
+        private int _selCol = -1;
+        public int SelectedRow => _selRow;  // Ecken-Index fuer StepCell
+        public int SelectedCol => _selCol;
+
+        // Event: Benutzer hat eine Zelle angeklickt (Row, Col)
+        public event Action<int, int> CellSelected;
 
         // -----------------------------------------------------------------------
         // Stil
@@ -46,10 +56,51 @@ namespace ECM_Stage_Helper_Tool
             DoubleBuffered = true;
             BackColor      = _bgTop;
 
-            MouseDown  += (s, e) => { if (e.Button == MouseButtons.Left)  { _dragging = true;  _lastMouse = e.Location; } };
-            MouseUp    += (s, e) => { if (e.Button == MouseButtons.Left)  { _dragging = false; } };
+            MouseDown  += (s, e) => { if (e.Button == MouseButtons.Left) { _dragging = true; _lastMouse = e.Location; } };
+            MouseUp    += OnMouseUp;
             MouseMove  += OnMouseMove;
             MouseWheel += OnMouseWheel;
+            KeyDown    += OnKeyDown;
+        }
+
+        // Pfeiltasten als Input-Tasten deklarieren damit sie nicht von der Form abgefangen werden
+        protected override bool IsInputKey(Keys keyData)
+        {
+            switch (keyData)
+            {
+                case Keys.Left: case Keys.Right:
+                case Keys.Up:   case Keys.Down:
+                    return true;
+            }
+            return base.IsInputKey(keyData);
+        }
+
+        private void OnKeyDown(object sender, KeyEventArgs e)
+        {
+            if (_selRow < 0 || _map == null) return;
+
+            int maxR = _map.Rows - 2; // letztes gueltiges Face-Row-Index
+            int maxC = _map.Cols - 2; // letztes gueltiges Face-Col-Index
+
+            int newR = _selRow;
+            int newC = _selCol;
+
+            switch (e.KeyCode)
+            {
+                case Keys.Left:  newC = Math.Max(0, _selCol - 1); break;
+                case Keys.Right: newC = Math.Min(maxC, _selCol + 1); break;
+                case Keys.Up:    newR = Math.Max(0, _selRow - 1); break;
+                case Keys.Down:  newR = Math.Min(maxR, _selRow + 1); break;
+                default: return;
+            }
+
+            if (newR == _selRow && newC == _selCol) return;
+
+            _selRow = newR;
+            _selCol = newC;
+            Invalidate();
+            CellSelected?.Invoke(_selRow, _selCol);
+            e.Handled = true;
         }
 
         // -----------------------------------------------------------------------
@@ -61,6 +112,13 @@ namespace ECM_Stage_Helper_Tool
             _map = map;
             if (map == null) { Invalidate(); return; }
             RecalcMinMax();
+            Invalidate();
+        }
+
+        /// <summary>Werte haben sich geaendert – MinMax neu berechnen und neu zeichnen.</summary>
+        public void RefreshValues()
+        {
+            if (_map != null) RecalcMinMax();
             Invalidate();
         }
 
@@ -111,6 +169,19 @@ namespace ECM_Stage_Helper_Tool
             _yaw   += dx * 0.4f;
             _pitch  = Clamp(_pitch + dy * 0.4f, -89f, 89f);
             Invalidate();
+        }
+
+        private void OnMouseUp(object sender, MouseEventArgs e)
+        {
+            if (e.Button != MouseButtons.Left) return;
+            float moved = Math.Abs(e.X - _lastMouse.X) + Math.Abs(e.Y - _lastMouse.Y);
+            _dragging = false;
+
+            // Kein Drag → als Klick werten → Zelle suchen
+            if (moved < 5f && _lastProj != null && _map != null)
+            {
+                HitTestCell(e.Location);
+            }
         }
 
         private void OnMouseWheel(object sender, MouseEventArgs e)
@@ -212,6 +283,9 @@ namespace ECM_Stage_Helper_Tool
                 }
             faces.Sort((a, b) => b.Depth.CompareTo(a.Depth));  // weiter weg zuerst
 
+            // Projektion cachen fuer spaeteren Hit-Test
+            _lastProj = proj;
+
             // --- Polygone zeichnen ---
             foreach (var f in faces)
             {
@@ -224,10 +298,20 @@ namespace ECM_Stage_Helper_Tool
                     proj[r+1, c]
                 };
 
-                using (var br = new SolidBrush(f.Color))
+                // Genau das Face hervorheben dessen obere-linke Ecke selektiert ist
+                bool isSel = (r == _selRow && c == _selCol);
+                using (var br = new SolidBrush(isSel ? Color.White : f.Color))
                     g.FillPolygon(br, poly);
 
-                g.DrawPolygon(_edgePen, poly);
+                if (isSel)
+                {
+                    using (var selPen = new Pen(Color.Yellow, 2f))
+                        g.DrawPolygon(selPen, poly);
+                }
+                else
+                {
+                    g.DrawPolygon(_edgePen, poly);
+                }
             }
 
             // --- Bodengitter (flache Z=0-Ebene) ---
@@ -284,7 +368,7 @@ namespace ECM_Stage_Helper_Tool
             for (int c = 0; c < cols; c += step)
             {
                 var pt = proj[rows - 1, c];
-                string lbl = _map.XAxis[c].ToString("G4");
+                string lbl = (_showOriginal ? _map.GetOriginalX(c) : _map.XAxis[c]).ToString("G4");
                 var sz = g.MeasureString(lbl, _labelFont);
                 g.DrawString(lbl, _labelFont, Brushes.LightSteelBlue,
                     pt.X - sz.Width / 2, pt.Y + 3);
@@ -295,7 +379,7 @@ namespace ECM_Stage_Helper_Tool
             for (int r = 0; r < rows; r += step)
             {
                 var pt = proj[r, 0];
-                string lbl = _map.YAxis[r].ToString("G4");
+                string lbl = (_showOriginal ? _map.GetOriginalY(r) : _map.YAxis[r]).ToString("G4");
                 var sz = g.MeasureString(lbl, _labelFont);
                 g.DrawString(lbl, _labelFont, Brushes.PeachPuff,
                     pt.X - sz.Width - 4, pt.Y - sz.Height / 2);
@@ -411,6 +495,38 @@ namespace ECM_Stage_Helper_Tool
         // -----------------------------------------------------------------------
 
         private static float DegToRad(float deg) => deg * (float)Math.PI / 180f;
+        private void HitTestCell(Point click)
+        {
+            if (_lastProj == null || _map == null) return;
+            int rows = _map.Rows;
+            int cols = _map.Cols;
+
+            // Suche das Face dessen projizierter Mittelpunkt am naechsten zum Klick liegt
+            float minDist = float.MaxValue;
+            int bestR = -1, bestC = -1;
+
+            for (int r = 0; r < rows - 1; r++)
+                for (int c = 0; c < cols - 1; c++)
+                {
+                    float mx = (_lastProj[r, c].X + _lastProj[r, c+1].X +
+                                _lastProj[r+1, c].X + _lastProj[r+1, c+1].X) / 4f;
+                    float my = (_lastProj[r, c].Y + _lastProj[r, c+1].Y +
+                                _lastProj[r+1, c].Y + _lastProj[r+1, c+1].Y) / 4f;
+                    float dx = mx - click.X;
+                    float dy = my - click.Y;
+                    float d  = dx * dx + dy * dy;
+                    if (d < minDist) { minDist = d; bestR = r; bestC = c; }
+                }
+
+            if (bestR < 0) return;
+
+            _selRow = bestR;
+            _selCol = bestC;
+            Invalidate();
+            // CellSelected mit oberer-linker Ecke des Face feuern
+            CellSelected?.Invoke(_selRow, _selCol);
+        }
+
         private static float Clamp(float v, float lo, float hi) => v < lo ? lo : v > hi ? hi : v;
 
         // -----------------------------------------------------------------------

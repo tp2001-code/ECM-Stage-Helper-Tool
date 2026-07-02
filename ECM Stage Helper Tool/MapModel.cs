@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 
@@ -77,6 +78,18 @@ namespace ECM_Stage_Helper_Tool
         {
             Values[row, col] = _originalValues[row, col];
             UnmarkCell(row, col);
+        }
+
+        /// <summary>
+        /// Erklärt den aktuellen Zustand (Achsen + Werte) zur neuen Basis.
+        /// Danach gelten alle Zellen als unverändert und IsCellModified gibt false zurück.
+        /// </summary>
+        public void AcceptCurrentAsOriginal()
+        {
+            Array.Copy(XAxis,   _originalX,      XAxis.Length);
+            Array.Copy(YAxis,   _originalY,      YAxis.Length);
+            Array.Copy(Values,  _originalValues, Values.Length);
+            ModifiedCells.Clear();
         }
 
         /// <summary>Gibt den unveränderten Originalwert einer Zelle zurück (für Vorschau).</summary>

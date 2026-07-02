@@ -22,3 +22,7 @@ Desktop.ini
 
 # ECU-Flash-Dateien
 *.bin
+
+# API Keys
+*API_Key*
+*API_key*

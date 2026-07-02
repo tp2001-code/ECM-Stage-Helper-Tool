@@ -30,6 +30,7 @@
             this._miSepRecent = new System.Windows.Forms.ToolStripSeparator();
             this._miRecentFolders = new System.Windows.Forms.ToolStripMenuItem();
             this._miSave = new System.Windows.Forms.ToolStripMenuItem();
+            this._miSaveAll = new System.Windows.Forms.ToolStripMenuItem();
             this._miSepBin = new System.Windows.Forms.ToolStripSeparator();
             this._miOpenBin = new System.Windows.Forms.ToolStripMenuItem();
             this._miSaveBin = new System.Windows.Forms.ToolStripMenuItem();
@@ -47,7 +48,12 @@
             this._miInterpolate = new System.Windows.Forms.ToolStripMenuItem();
             this._miCopySel = new System.Windows.Forms.ToolStripMenuItem();
             this._miPasteSel = new System.Windows.Forms.ToolStripMenuItem();
-            this._mAnsicht = new System.Windows.Forms.ToolStripMenuItem();
+            this._miSep3          = new System.Windows.Forms.ToolStripSeparator();
+            this._miAllCsvToBin   = new System.Windows.Forms.ToolStripMenuItem();
+            this._miAllBinToCsv   = new System.Windows.Forms.ToolStripMenuItem();
+            this._mKiRemap        = new System.Windows.Forms.ToolStripMenuItem();
+            this._miAiRemapWizard = new System.Windows.Forms.ToolStripMenuItem();
+            this._miShiftTorque   = new System.Windows.Forms.ToolStripMenuItem();            this._mAnsicht = new System.Windows.Forms.ToolStripMenuItem();
             this._miToggle = new System.Windows.Forms.ToolStripMenuItem();
             this._lbMaps = new System.Windows.Forms.ListBox();
             this._ctxMaps = new System.Windows.Forms.ContextMenuStrip(this.components);
@@ -67,11 +73,18 @@
             this._cmiInc5         = new System.Windows.Forms.ToolStripMenuItem();
             this._cmiInc7         = new System.Windows.Forms.ToolStripMenuItem();
             this._cmiInc10        = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiDecrease     = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiDec1         = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiDec3         = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiDec5         = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiDec7         = new System.Windows.Forms.ToolStripMenuItem();
+            this._cmiDec10        = new System.Windows.Forms.ToolStripMenuItem();
             this._panel3D = new ECM_Stage_Helper_Tool.Map3DPanel();
             this._pnlOriginalBorder = new System.Windows.Forms.Panel();
             this._dgvBin = new ECM_Stage_Helper_Tool.BufferedDataGridView();
             this._lblBinHeader = new System.Windows.Forms.Label();
             this._btnApplyToBin = new System.Windows.Forms.Button();
+            this._btnReadFromBin = new System.Windows.Forms.Button();
             this._btnView2D = new System.Windows.Forms.Button();
             this._btnView3D = new System.Windows.Forms.Button();
             this._btnResetMap = new System.Windows.Forms.Button();
@@ -79,6 +92,7 @@
             this._lblInfo = new System.Windows.Forms.Label();
             this._lblMapName = new System.Windows.Forms.Label();
             this._lblUnit = new System.Windows.Forms.Label();
+            this._lblPower = new System.Windows.Forms.Label();
             this._toolTip = new System.Windows.Forms.ToolTip(this.components);
             this._menuStrip.SuspendLayout();
             this._ctxMaps.SuspendLayout();
@@ -93,7 +107,8 @@
             this._menuStrip.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this._mDatei,
             this._mBearbeiten,
-            this._mAnsicht});
+            this._mAnsicht,
+            this._mKiRemap});
             this._menuStrip.Location = new System.Drawing.Point(0, 0);
             this._menuStrip.Name = "_menuStrip";
             this._menuStrip.Padding = new System.Windows.Forms.Padding(5, 2, 0, 2);
@@ -109,6 +124,7 @@
             this._miSepRecent,
             this._miRecentFolders,
             this._miSave,
+            this._miSaveAll,
             this._miSepBin,
             this._miOpenBin,
             this._miSaveBin,
@@ -159,6 +175,14 @@
             this._miSave.Size = new System.Drawing.Size(168, 22);
             this._miSave.Text = "&Speichern";
             this._miSave.Click += new System.EventHandler(this.BtnSave_Click);
+            // 
+            // _miSaveAll
+            // 
+            this._miSaveAll.Name = "_miSaveAll";
+            this._miSaveAll.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Shift | System.Windows.Forms.Keys.S)));
+            this._miSaveAll.Size = new System.Drawing.Size(168, 22);
+            this._miSaveAll.Text = "Alle CSV &speichern";
+            this._miSaveAll.Click += new System.EventHandler(this.MiSaveAll_Click);
             // 
             // _miSepBin
             // 
@@ -235,7 +259,10 @@
             this._miSep2,
             this._miInterpolate,
             this._miCopySel,
-            this._miPasteSel});
+            this._miPasteSel,
+            this._miSep3,
+            this._miAllCsvToBin,
+            this._miAllBinToCsv});
             this._mBearbeiten.Name = "_mBearbeiten";
             this._mBearbeiten.Size = new System.Drawing.Size(75, 20);
             this._mBearbeiten.Text = "&Bearbeiten";
@@ -284,6 +311,48 @@
             this._miPasteSel.Size = new System.Drawing.Size(205, 22);
             this._miPasteSel.Text = "&Einfügen";
             this._miPasteSel.Click += new System.EventHandler(this.MiPasteSel_Click);
+            // 
+            // _miSep3
+            // 
+            this._miSep3.Name = "_miSep3";
+            this._miSep3.Size = new System.Drawing.Size(202, 6);
+            // 
+            // _miAllCsvToBin
+            // 
+            this._miAllCsvToBin.Name = "_miAllCsvToBin";
+            this._miAllCsvToBin.Size = new System.Drawing.Size(205, 22);
+            this._miAllCsvToBin.Text = "Alle &CSV \u2192 BIN";
+            this._miAllCsvToBin.Click += new System.EventHandler(this.MiAllCsvToBin_Click);
+            // 
+            // _miAllBinToCsv
+            // 
+            this._miAllBinToCsv.Name = "_miAllBinToCsv";
+            this._miAllBinToCsv.Size = new System.Drawing.Size(205, 22);
+            this._miAllBinToCsv.Text = "Alle &BIN \u2192 CSV";
+            this._miAllBinToCsv.Click += new System.EventHandler(this.MiAllBinToCsv_Click);
+            // 
+            // _mKiRemap
+            //
+            this._mKiRemap.Name = "_mKiRemap";
+            this._mKiRemap.Size = new System.Drawing.Size(72, 20);
+            this._mKiRemap.Text = "&KI-Remap";
+            this._mKiRemap.BackColor = System.Drawing.Color.FromArgb(210, 230, 255);
+            this._mKiRemap.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+                this._miAiRemapWizard,
+                new System.Windows.Forms.ToolStripSeparator(),
+                this._miShiftTorque });
+            // 
+            // _miAiRemapWizard
+            //
+            this._miAiRemapWizard.Name = "_miAiRemapWizard";
+            this._miAiRemapWizard.Text = "KI-Remap Wizard...";
+            this._miAiRemapWizard.Click += new System.EventHandler(this.MiAiRemap_Click);
+            //
+            // _miShiftTorque
+            //
+            this._miShiftTorque.Name = "_miShiftTorque";
+            this._miShiftTorque.Text = "Drehmoment-Plateau verschieben...";
+            this._miShiftTorque.Click += new System.EventHandler(this.MiShiftTorquePlateau_Click);
             // 
             // _mAnsicht
             // 
@@ -376,7 +445,8 @@
             this._cmiCopySel,
             this._cmiPasteSel,
             this._cmiSepIncrease,
-            this._cmiIncrease});
+            this._cmiIncrease,
+            this._cmiDecrease});
             this._ctxDgv.Name = "_ctxDgv";
             this._ctxDgv.Size = new System.Drawing.Size(166, 76);
             this._ctxDgv.Opening += new System.ComponentModel.CancelEventHandler(this.CtxDgv_Opening);
@@ -455,6 +525,47 @@
             this._cmiInc10.Text = "+10 %";
             this._cmiInc10.Click += new System.EventHandler(this.CmiInc_Click);
             // 
+            // _cmiDecrease
+            // 
+            this._cmiDecrease.Name = "_cmiDecrease";
+            this._cmiDecrease.Text = "Markierte verringern";
+            this._cmiDecrease.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+                this._cmiDec1,
+                this._cmiDec3,
+                this._cmiDec5,
+                this._cmiDec7,
+                this._cmiDec10});
+            // 
+            // _cmiDec1
+            // 
+            this._cmiDec1.Name = "_cmiDec1";
+            this._cmiDec1.Text = "-1 %";
+            this._cmiDec1.Click += new System.EventHandler(this.CmiInc_Click);
+            // 
+            // _cmiDec3
+            // 
+            this._cmiDec3.Name = "_cmiDec3";
+            this._cmiDec3.Text = "-3 %";
+            this._cmiDec3.Click += new System.EventHandler(this.CmiInc_Click);
+            // 
+            // _cmiDec5
+            // 
+            this._cmiDec5.Name = "_cmiDec5";
+            this._cmiDec5.Text = "-5 %";
+            this._cmiDec5.Click += new System.EventHandler(this.CmiInc_Click);
+            // 
+            // _cmiDec7
+            // 
+            this._cmiDec7.Name = "_cmiDec7";
+            this._cmiDec7.Text = "-7,5 %";
+            this._cmiDec7.Click += new System.EventHandler(this.CmiInc_Click);
+            // 
+            // _cmiDec10
+            // 
+            this._cmiDec10.Name = "_cmiDec10";
+            this._cmiDec10.Text = "-10 %";
+            this._cmiDec10.Click += new System.EventHandler(this.CmiInc_Click);
+            // 
             // _panel3D
             // 
             this._panel3D.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
@@ -528,6 +639,24 @@
             this._btnApplyToBin.Text = "CSV → BIN übernehmen";
             this._btnApplyToBin.Visible = false;
             this._btnApplyToBin.Click += new System.EventHandler(this.BtnApplyToBin_Click);
+            // 
+            // _btnReadFromBin
+            // 
+            this._btnReadFromBin.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
+            this._btnReadFromBin.BackColor = System.Drawing.Color.FromArgb(0, 80, 140);
+            this._btnReadFromBin.FlatAppearance.BorderColor = System.Drawing.Color.DodgerBlue;
+            this._btnReadFromBin.FlatAppearance.BorderSize = 2;
+            this._btnReadFromBin.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this._btnReadFromBin.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.5F, System.Drawing.FontStyle.Bold);
+            this._btnReadFromBin.ForeColor = System.Drawing.Color.White;
+            this._btnReadFromBin.Location = new System.Drawing.Point(740, 330);
+            this._btnReadFromBin.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this._btnReadFromBin.Name = "_btnReadFromBin";
+            this._btnReadFromBin.Size = new System.Drawing.Size(110, 22);
+            this._btnReadFromBin.TabIndex = 15;
+            this._btnReadFromBin.Text = "BIN \u2192 CSV übernehmen";
+            this._btnReadFromBin.Visible = false;
+            this._btnReadFromBin.Click += new System.EventHandler(this.BtnReadFromBin_Click);
             // 
             // _btnView2D
             // 
@@ -621,14 +750,30 @@
             this._lblUnit.TabIndex = 10;
             this._lblUnit.Text = "";
             // 
+            // _lblPower
+            // 
+            this._lblPower.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this._lblPower.Font = new System.Drawing.Font("Consolas", 9F);
+            this._lblPower.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(80)))), ((int)(((byte)(200)))), ((int)(((byte)(80)))));
+            this._lblPower.Location = new System.Drawing.Point(208, 510);
+            this._lblPower.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this._lblPower.Name = "_lblPower";
+            this._lblPower.Size = new System.Drawing.Size(756, 18);
+            this._lblPower.TabIndex = 16;
+            this._lblPower.Text = "";
+            this._lblPower.Visible = false;
+            // 
             // Form1
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(972, 513);
             this.Controls.Add(this._btnApplyToBin);
+            this.Controls.Add(this._btnReadFromBin);
             this.Controls.Add(this._lblBinHeader);
             this.Controls.Add(this._dgvBin);
+            this.Controls.Add(this._lblPower);
             this.Controls.Add(this._lblInfo);
             this.Controls.Add(this._lblUnit);
             this.Controls.Add(this._lblMapName);
@@ -670,6 +815,7 @@
         private System.Windows.Forms.ToolStripSeparator _miSepRecent;
         private System.Windows.Forms.ToolStripMenuItem  _miRecentFolders;
         private System.Windows.Forms.ToolStripMenuItem _miSave;
+        private System.Windows.Forms.ToolStripMenuItem _miSaveAll;
         private System.Windows.Forms.ToolStripSeparator _miSepBin;
         private System.Windows.Forms.ToolStripMenuItem _miOpenBin;
         private System.Windows.Forms.ToolStripMenuItem _miSaveBin;
@@ -696,6 +842,7 @@
         private System.Windows.Forms.Label            _lblInfo;
         private System.Windows.Forms.Label            _lblMapName;
         private System.Windows.Forms.Label            _lblUnit;
+        private System.Windows.Forms.Label            _lblPower;
         private System.Windows.Forms.ToolTip          _toolTip;
         private System.Windows.Forms.ContextMenuStrip   _ctxMaps;
         private System.Windows.Forms.ToolStripMenuItem  _cmiRefresh;
@@ -713,13 +860,26 @@
         private System.Windows.Forms.ToolStripMenuItem  _cmiInc5;
         private System.Windows.Forms.ToolStripMenuItem  _cmiInc7;
         private System.Windows.Forms.ToolStripMenuItem  _cmiInc10;
+        private System.Windows.Forms.ToolStripMenuItem  _cmiDecrease;
+        private System.Windows.Forms.ToolStripMenuItem  _cmiDec1;
+        private System.Windows.Forms.ToolStripMenuItem  _cmiDec3;
+        private System.Windows.Forms.ToolStripMenuItem  _cmiDec5;
+        private System.Windows.Forms.ToolStripMenuItem  _cmiDec7;
+        private System.Windows.Forms.ToolStripMenuItem  _cmiDec10;
         private ECM_Stage_Helper_Tool.BufferedDataGridView _dgvBin;
         private System.Windows.Forms.Label            _lblBinHeader;
         private System.Windows.Forms.Button           _btnApplyToBin;
+        private System.Windows.Forms.Button           _btnReadFromBin;
         private System.Windows.Forms.ToolStripSeparator _miSep2;
+        private System.Windows.Forms.ToolStripSeparator _miSep3;
         private System.Windows.Forms.ToolStripMenuItem  _miInterpolate;
         private System.Windows.Forms.ToolStripMenuItem  _miCopySel;
         private System.Windows.Forms.ToolStripMenuItem  _miPasteSel;
+        private System.Windows.Forms.ToolStripMenuItem  _miAllCsvToBin;
+        private System.Windows.Forms.ToolStripMenuItem  _miAllBinToCsv;
+        private System.Windows.Forms.ToolStripMenuItem  _mKiRemap;
+        private System.Windows.Forms.ToolStripMenuItem  _miAiRemapWizard;
+        private System.Windows.Forms.ToolStripMenuItem  _miShiftTorque;
     }
 }
 

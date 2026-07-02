@@ -36,9 +36,10 @@ namespace ECM_Stage_Helper_Tool
         private Size _normalSize;
 
         // --- +/- Zellen-Schritt (Undo-Batching bei gehaltenem Tastendruck) ---
-        private bool   _stepPending;
-        private int    _stepPendingRow, _stepPendingCol;
-        private double _stepBaseValue;
+        private bool      _stepPending;
+        private int       _stepPendingRow, _stepPendingCol;
+        private double    _stepBaseValue;
+        private double[,] _stepSnapshotBefore; // fuer Multi-Zell-Undo
 
         public Form1()
         {
@@ -110,12 +111,17 @@ namespace ECM_Stage_Helper_Tool
 
         private void MBearbeiten_DropDownOpening(object sender, EventArgs e)
         {
-            bool hasSel = _dgv.SelectedCells.Count > 1 && !_showingOriginal && _currentMap != null;
-            _miUndo.Enabled      = _undo.CanUndo;
-            _miRedo.Enabled      = _undo.CanRedo;
-            _miInterpolate.Enabled = hasSel;
-            _miCopySel.Enabled     = hasSel;
-            _miPasteSel.Enabled    = hasSel && _clipboard != null;
+            bool hasSel    = _dgv.SelectedCells.Count > 1 && !_showingOriginal && _currentMap != null;
+            bool hasBin    = _binFlash != null && _maps.Count > 0;
+            _miUndo.Enabled          = _undo.CanUndo;
+            _miRedo.Enabled          = _undo.CanRedo;
+            _miInterpolate.Enabled   = hasSel;
+            _miCopySel.Enabled       = hasSel;
+            _miPasteSel.Enabled      = hasSel && _clipboard != null;
+            _miAllCsvToBin.Enabled   = hasBin;
+            _miAllBinToCsv.Enabled   = hasBin;
+            _mKiRemap.Enabled        = _maps.Count > 0;
+            _miShiftTorque.Enabled   = _maps.Any(m => m.Name.ToLowerInvariant().Contains("drehmoment") && m.Name.ToLowerInvariant().Contains("begrenzer"));
         }
 
         private void BtnView2D_Click(object sender, EventArgs e) => Switch3D(false);
@@ -162,8 +168,14 @@ namespace ECM_Stage_Helper_Tool
             _lblInfo.Top   = row2Y + (btnH - _lblInfo.Height) / 2;
             _lblInfo.Width = ClientSize.Width - _lblInfo.Left - gap;
 
+            // Zeile 3: Leistungsschätzung
+            int row3Y = row2Y + btnH + 2;
+            _lblPower.Left  = gridX;
+            _lblPower.Top   = row3Y;
+            _lblPower.Width = gridW;
+
             // --- Grid füllt den Rest unterhalb des Info-Bereichs ---
-            int gridY = row2Y + btnH + gap;
+            int gridY = row3Y + _lblPower.Height + gap;
             int gridX2 = gridX;
             int gridW2 = gridW;
 
@@ -188,10 +200,13 @@ namespace ECM_Stage_Helper_Tool
                 int binHeaderY = _dgv.Bottom + gap;
                 _lblBinHeader.Left   = gridX2;
                 _lblBinHeader.Top    = binHeaderY;
-                _lblBinHeader.Width  = gridW2 - _btnApplyToBin.Width - gap;
+                _lblBinHeader.Width  = gridW2 - _btnApplyToBin.Width - _btnReadFromBin.Width - gap * 2;
 
-                _btnApplyToBin.Left = ClientSize.Width - _btnApplyToBin.Width - gap;
-                _btnApplyToBin.Top  = binHeaderY;
+                _btnApplyToBin.Left  = ClientSize.Width - _btnApplyToBin.Width - gap;
+                _btnApplyToBin.Top   = binHeaderY;
+
+                _btnReadFromBin.Left = _btnApplyToBin.Left - _btnReadFromBin.Width - gap;
+                _btnReadFromBin.Top  = binHeaderY;
 
                 _dgvBin.Location = new Point(gridX2, binHeaderY + _lblBinHeader.Height + 2);
                 _dgvBin.Size     = new Size(gridW2, binH);
@@ -261,11 +276,19 @@ namespace ECM_Stage_Helper_Tool
             // + / -: ausgewählte Zelle um 1 erhöhen / verringern
             bool isPlus  = keyData == Keys.Add      || keyData == Keys.Oemplus;
             bool isMinus = keyData == Keys.Subtract || keyData == Keys.OemMinus;
-            if ((isPlus || isMinus) && _currentMap != null && !_dgv.IsCurrentCellInEditMode
-                && !_show3D && !_showingOriginal && _dgv.ContainsFocus)
+            if ((isPlus || isMinus) && _currentMap != null && !_showingOriginal)
             {
-                StepCell(isPlus ? +1 : -1);
-                return true;
+                if (!_show3D && !_dgv.IsCurrentCellInEditMode && _dgv.ContainsFocus)
+                {
+                    StepCell(isPlus ? +1 : -1);
+                    return true;
+                }
+                if (_show3D && _panel3D.ContainsFocus && _panel3D.SelectedRow >= 0)
+                {
+                    StepCell(isPlus ? +1 : -1);
+                    UpdatePowerEstimate();
+                    return true;
+                }
             }
             return base.ProcessCmdKey(ref msg, keyData);
         }
@@ -461,6 +484,69 @@ namespace ECM_Stage_Helper_Tool
         private void MiInterpolate_Click(object sender, EventArgs e) => ExecuteInterpolate();
         private void MiCopySel_Click(object sender, EventArgs e)     => ExecuteCopy();
         private void MiPasteSel_Click(object sender, EventArgs e)    => ExecutePaste();
+        private void MiAllCsvToBin_Click(object sender, EventArgs e) => ExecuteAllCsvToBin();
+        private void MiAllBinToCsv_Click(object sender, EventArgs e) => ExecuteAllBinToCsv();
+
+        private void MiAiRemap_Click(object sender, EventArgs e)
+        {
+            using (var wizard = new AiRemap.AiRemapWizard(_maps))
+            {
+                if (wizard.ShowDialog(this) == DialogResult.OK && _currentMap != null)
+                {
+                    RenderMap(_currentMap);
+                    if (_binFlash != null) RenderBinMap(_currentMap);
+                    UpdatePowerEstimate();
+                }
+            }
+        }
+
+        private void MiShiftTorquePlateau_Click(object sender, EventArgs e)
+        {
+            // Drehmoment-Begrenzer in geladenen Maps suchen
+            var torqueMap = _maps.FirstOrDefault(m =>
+                m.Name.ToLowerInvariant().Contains("drehmoment") &&
+                m.Name.ToLowerInvariant().Contains("begrenzer"));
+
+            if (torqueMap == null)
+            {
+                MessageBox.Show("Keine Drehmoment-Begrenzer-Map geladen.\nBitte zuerst die CSV-Maps laden.",
+                    "Map nicht gefunden", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // Dialog fuer RPM-Verschiebung
+            string input = PromptDialog.Show(
+                $"Drehmoment-Plateau verschieben\n\nMap: {torqueMap.Name}\n\nRPM-Verschiebung (positiv = Plateau zu hoeherem Drehzahlbereich verschieben):",
+                "Drehmoment-Plateau verschieben");
+
+            if (input == null) return;
+            if (!double.TryParse(input.Replace(",", "."),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out double shift) || shift == 0)
+            {
+                MessageBox.Show("Ungueltige Eingabe.", "Fehler", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+                    bool changed = AiRemap.RemapEngine.ShiftTorquePlateauRpm(torqueMap, shift);
+                    if (!changed)
+                    {
+                        MessageBox.Show("Keine Aenderung vorgenommen.", "Hinweis", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return;
+                    }
+
+                    // Ansicht aktualisieren
+                    if (_currentMap == torqueMap)
+                    {
+                        RenderMap(_currentMap);
+                        if (_binFlash != null) RenderBinMap(_currentMap);
+                    }
+                    UpdatePowerEstimate();
+
+                    MessageBox.Show(
+                        $"Drehmoment-Plateau um {shift:F0} RPM verschoben.\nAenderungen sind rot markiert.",
+                        "Fertig", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
 
         private void CmiInc_Click(object sender, EventArgs e)
         {
@@ -717,9 +803,10 @@ namespace ECM_Stage_Helper_Tool
             if (_binFlash != null)
             {
                 RenderBinMap(_currentMap);
-                _dgvBin.Visible        = true;
-                _lblBinHeader.Visible  = true;
-                _btnApplyToBin.Visible = true;
+                _dgvBin.Visible         = true;
+                _lblBinHeader.Visible   = true;
+                _btnApplyToBin.Visible  = true;
+                _btnReadFromBin.Visible = true;
                 Form1_Resize(this, EventArgs.Empty);
             }
         }
@@ -738,9 +825,11 @@ namespace ECM_Stage_Helper_Tool
             _miRedo.Enabled       = false;
             _miToggle.Enabled     = false;
             _mBearbeiten.Enabled  = false;
-            _dgvBin.Visible        = false;
-            _lblBinHeader.Visible  = false;
-            _btnApplyToBin.Visible = false;
+            _dgvBin.Visible         = false;
+            _lblBinHeader.Visible   = false;
+            _btnApplyToBin.Visible  = false;
+            _btnReadFromBin.Visible = false;
+            _lblPower.Visible      = false;
 
             // Formgröße auf Titelleiste + Menü einschränken
             int compactH = _menuStrip.Bottom + SystemInformation.FrameBorderSize.Height * 2
@@ -767,6 +856,7 @@ namespace ECM_Stage_Helper_Tool
             _btnView3D.Enabled    = true;
             _miToggle.Enabled     = true;
             _mBearbeiten.Enabled  = true;
+            _lblPower.Visible     = true;
         }
 
         private void RenderMap(MapModel map)
@@ -776,6 +866,7 @@ namespace ECM_Stage_Helper_Tool
             {
                 _panel3D.SetMap(map);
                 _panel3D.SetOriginalView(_showingOriginal);
+                UpdatePowerEstimate();
                 return;
             }
 
@@ -850,6 +941,8 @@ namespace ECM_Stage_Helper_Tool
                 _lblUnit.Visible    = !string.IsNullOrEmpty(map.Unit);
                 _dgv.ResumeLayout();
                 } // DrawingLocker.Dispose → einmaliges Refresh
+
+                UpdatePowerEstimate();
             }
             catch (Exception ex)
             {
@@ -860,25 +953,74 @@ namespace ECM_Stage_Helper_Tool
 
         private void StepCell(int delta)
         {
-            if (_dgv.CurrentCell == null) return;
-            int row = _dgv.CurrentCell.RowIndex;
-            int col = _dgv.CurrentCell.ColumnIndex;
-            if (row < 0 || col < 0) return;
+            if (_currentMap == null || _showingOriginal) return;
 
-            double oldValue = _currentMap.Values[row, col];
-
-            // Neue Sequenz beginnen (andere Zelle oder erstes Drücken)
-            if (!_stepPending || _stepPendingRow != row || _stepPendingCol != col)
+            if (_show3D)
             {
-                _stepPending    = true;
-                _stepPendingRow = row;
-                _stepPendingCol = col;
-                _stepBaseValue  = oldValue;
+                // 3D-Modus: selektierte Zelle vom Panel
+                int r3 = _panel3D.SelectedRow;
+                int c3 = _panel3D.SelectedCol;
+                if (r3 < 0 || c3 < 0) return;
+
+                double oldVal = _currentMap.Values[r3, c3];
+                if (!_stepPending || _stepPendingRow != r3 || _stepPendingCol != c3)
+                {
+                    _stepPending    = true;
+                    _stepPendingRow = r3;
+                    _stepPendingCol = c3;
+                    _stepBaseValue  = oldVal;
+                }
+                _currentMap.Values[r3, c3] = oldVal + delta;
+                _currentMap.MarkCellModified(r3, c3);
+                _panel3D.RefreshValues();
+                if (_binFlash != null) RenderBinMap(_currentMap);
+                return;
             }
 
-            _currentMap.Values[row, col] = oldValue + delta;
-            _currentMap.MarkCellModified(row, col);
-            RefreshCell(row, col);
+            // 2D-Modus: alle selektierten Zellen
+            var cells = _dgv.SelectedCells;
+            if (cells.Count == 0 && _dgv.CurrentCell != null)
+            {
+                // Fallback: nur aktuelle Zelle
+                int row = _dgv.CurrentCell.RowIndex;
+                int col = _dgv.CurrentCell.ColumnIndex;
+                if (row < 0 || col < 0) return;
+
+                double oldValue = _currentMap.Values[row, col];
+                if (!_stepPending || _stepPendingRow != row || _stepPendingCol != col)
+                {
+                    _stepPending    = true;
+                    _stepPendingRow = row;
+                    _stepPendingCol = col;
+                    _stepBaseValue  = oldValue;
+                }
+                _currentMap.Values[row, col] = oldValue + delta;
+                _currentMap.MarkCellModified(row, col);
+                RefreshCell(row, col);
+                if (_binFlash != null) RenderBinMap(_currentMap);
+                return;
+            }
+
+            // Mehrere Zellen markiert: alle gleichzeitig um delta verschieben
+            // Undo: ein gemeinsamer Snapshot vor dem ersten Tastendruck
+            if (!_stepPending)
+            {
+                _stepPending    = true;
+                _stepPendingRow = -1; // Multi-Zell-Marker
+                _stepPendingCol = -1;
+                // Snapshot der aktuellen Map-Werte für Undo
+                _stepSnapshotBefore = (double[,])_currentMap.Values.Clone();
+            }
+
+            foreach (DataGridViewCell cell in cells)
+            {
+                int r = cell.RowIndex;
+                int c = cell.ColumnIndex;
+                if (r < 0 || c < 0) continue;
+                _currentMap.Values[r, c] += delta;
+                _currentMap.MarkCellModified(r, c);
+                RefreshCell(r, c);
+            }
             if (_binFlash != null) RenderBinMap(_currentMap);
         }
 
@@ -887,9 +1029,38 @@ namespace ECM_Stage_Helper_Tool
             if (!_stepPending) return;
             _stepPending = false;
             if (_currentMap == null) return;
-            double finalValue = _currentMap.Values[_stepPendingRow, _stepPendingCol];
-            if (Math.Abs(finalValue - _stepBaseValue) >= 1e-12)
-                _undo.Push(new CellUndoAction(_currentMap, _stepPendingRow, _stepPendingCol, _stepBaseValue, finalValue));
+
+            if (_stepPendingRow >= 0)
+            {
+                // Einzelne Zelle
+                double finalValue = _currentMap.Values[_stepPendingRow, _stepPendingCol];
+                if (Math.Abs(finalValue - _stepBaseValue) >= 1e-12)
+                    _undo.Push(new CellUndoAction(_currentMap, _stepPendingRow, _stepPendingCol, _stepBaseValue, finalValue));
+            }
+            else if (_stepSnapshotBefore != null)
+            {
+                // Mehrere Zellen: Snapshot-Undo via MapSnapshotUndoAction
+                var snapshotAction = new MapSnapshotUndoAction(new[] { _currentMap });
+                // Werte temporaer tauschen: aktuell -> after, snapshot -> before
+                var afterValues = (double[,])_currentMap.Values.Clone();
+                Array.Copy(_stepSnapshotBefore, _currentMap.Values, _stepSnapshotBefore.Length);
+                // before-Snapshot aufzeichnen (bereits im Feld-Zustand)
+                // Dann wieder auf after zurücksetzen
+                Array.Copy(afterValues, _currentMap.Values, afterValues.Length);
+                snapshotAction.CaptureAfterState();
+                // before wiederherstellen fuer Undo korrekt -> einfacherer Weg: CellUndoActions
+                // Stattdessen: direkt alle geaenderten Zellen als Einzel-Undo pushen
+                foreach (DataGridViewCell cell in _dgv.SelectedCells)
+                {
+                    int r = cell.RowIndex; int c = cell.ColumnIndex;
+                    if (r < 0 || c < 0) continue;
+                    double before = _stepSnapshotBefore[r, c];
+                    double after  = _currentMap.Values[r, c];
+                    if (Math.Abs(before - after) >= 1e-12)
+                        _undo.Push(new CellUndoAction(_currentMap, r, c, before, after));
+                }
+                _stepSnapshotBefore = null;
+            }
         }
 
         private void Dgv_KeyUp(object sender, KeyEventArgs e)
@@ -977,6 +1148,7 @@ namespace ECM_Stage_Helper_Tool
             _currentMap.Values[row, mapCol] = val;
             _currentMap.MarkCellModified(row, mapCol);
             _dgv.Rows[row].Cells[gridCol].Style.BackColor = Color.LightCoral;
+            UpdatePowerEstimate();
         }
 
         // -----------------------------------------------------------------------
@@ -1185,6 +1357,54 @@ namespace ECM_Stage_Helper_Tool
             }
         }
 
+        private void MiSaveAll_Click(object sender, EventArgs e) => ExecuteSaveAll();
+
+        private void ExecuteSaveAll()
+        {
+            if (_maps.Count == 0) return;
+
+            int modCount = 0;
+            foreach (var m in _maps)
+                if (m.ModifiedCells.Count > 0) modCount++;
+
+            if (MessageBox.Show(
+                    $"Alle {_maps.Count} CSV-Maps in die jeweilige Originaldatei speichern?\n" +
+                    $"({modCount} Map(s) mit Änderungen)\n\n" +
+                    "Danach gelten alle aktuellen Werte als neue Basis –\n" +
+                    "die roten Markierungen verschwinden.",
+                    "Alle CSV speichern",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question) != DialogResult.Yes) return;
+
+            var errors = new List<string>();
+            foreach (var map in _maps)
+            {
+                try
+                {
+                    CsvParser.SaveMap(map, map.FilePath);
+                    map.AcceptCurrentAsOriginal();
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"{map.Name}: {ex.Message}");
+                }
+            }
+
+            _undo.Clear();
+            _miUndo.Enabled = false;
+            _miRedo.Enabled = false;
+
+            if (_currentMap != null)
+            {
+                RenderMap(_currentMap);
+                if (_binFlash != null) RenderBinMap(_currentMap);
+            }
+
+            if (errors.Count > 0)
+                MessageBox.Show($"Fehler bei {errors.Count} Map(s):\n{string.Join("\n", errors)}",
+                    "Teilfehler", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+
         // -----------------------------------------------------------------------
         // BIN laden / speichern
         // -----------------------------------------------------------------------
@@ -1280,9 +1500,10 @@ namespace ECM_Stage_Helper_Tool
                     Text = $"ECM Stage Helper – {Path.GetFileName(dlg.FileName)}";
                     // BIN-Controls sichtbar machen
                     _miSaveBin.Enabled   = true;
-                    _btnApplyToBin.Visible = _currentMap != null;
-                    _lblBinHeader.Visible  = _currentMap != null;
-                    _dgvBin.Visible        = _currentMap != null;
+                    _btnApplyToBin.Visible  = _currentMap != null;
+                    _btnReadFromBin.Visible = _currentMap != null;
+                    _lblBinHeader.Visible   = _currentMap != null;
+                    _dgvBin.Visible         = _currentMap != null;
                     if (_currentMap != null) RenderBinMap(_currentMap);
                     Form1_Resize(this, EventArgs.Empty);
                     MessageBox.Show($"BIN geladen:\n{dlg.FileName}", "BIN geöffnet",
@@ -1303,7 +1524,8 @@ namespace ECM_Stage_Helper_Tool
             {
                 dlg.Title = "BIN-Flash-Dump speichern";
                 dlg.Filter = "BIN-Dateien|*.bin|Alle Dateien|*.*";
-                dlg.FileName = Path.GetFileName(_binFlash.FilePath);
+                var binName = Path.GetFileNameWithoutExtension(_binFlash.FilePath) + "_mod" + Path.GetExtension(_binFlash.FilePath);
+                dlg.FileName = binName;
                 if (_csvFolder != null)
                     dlg.InitialDirectory = _csvFolder;
                 if (dlg.ShowDialog() != DialogResult.OK) return;
@@ -1357,6 +1579,111 @@ namespace ECM_Stage_Helper_Tool
                 MessageBoxIcon.Information);
         }
 
+        private void BtnReadFromBin_Click(object sender, EventArgs e)
+        {
+            if (_binFlash == null || _currentMap == null) return;
+
+            var confirm = MessageBox.Show(
+                $"BIN-Werte von\n\"{_currentMap.MapName ?? _currentMap.Name}\"\nin die CSV-Map übernehmen?\n\n" +
+                "Die CSV-Map im Speicher wird mit den BIN-Werten überschrieben.\n" +
+                "Der Vorgang kann per Rückgängig (Strg+Z) rückgängig gemacht werden.",
+                "BIN → CSV – Rückfrage",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+
+            if (confirm != DialogResult.Yes) return;
+
+            var snap = new MapSnapshotUndoAction(new[] { _currentMap });
+            if (!_binFlash.ReadMapValuesIntoMap(_currentMap))
+            {
+                MessageBox.Show(
+                    "Die Map hat keine gültige BIN-Adresse oder liegt außerhalb des Dumps.\n" +
+                    "Es wurden keine Werte übernommen.",
+                    "Nicht möglich",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+            snap.CaptureAfterState();
+            _undo.Push(snap);
+            RenderMap(_currentMap);
+            RenderBinMap(_currentMap);
+            UpdatePowerEstimate();
+            MessageBox.Show(
+                "BIN-Werte wurden in die CSV-Map übernommen.\n" +
+                "Vergiss nicht, die CSV zu speichern (Datei → Speichern).",
+                "Übernommen",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+
+        private void ExecuteAllCsvToBin()
+        {
+            if (_binFlash == null || _maps.Count == 0) return;
+
+            var confirm = MessageBox.Show(
+                $"Alle {_maps.Count} CSV-Maps in die BIN übernehmen?\n\n" +
+                "Maps ohne gültige BIN-Adresse werden übersprungen.\n" +
+                "Die BIN-Datei wird im Speicher verändert.",
+                "Alle CSV → BIN – Rückfrage",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+
+            if (confirm != DialogResult.Yes) return;
+
+            int ok = 0, skip = 0;
+            foreach (var map in _maps)
+            {
+                if (_binFlash.WriteMapValues(map)) ok++;
+                else                               skip++;
+            }
+
+            if (_currentMap != null) RenderBinMap(_currentMap, highlightWritten: true);
+            MessageBox.Show(
+                $"{ok} Map(s) übertragen, {skip} übersprungen (keine Adresse).\n" +
+                "Vergiss nicht, die BIN zu speichern (Datei → BIN speichern).",
+                "Alle CSV → BIN",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+
+        private void ExecuteAllBinToCsv()
+        {
+            if (_binFlash == null || _maps.Count == 0) return;
+
+            var confirm = MessageBox.Show(
+                $"Alle {_maps.Count} CSV-Maps mit BIN-Werten überschreiben?\n\n" +
+                "Maps ohne gültige BIN-Adresse werden übersprungen.\n" +
+                "Der Vorgang kann per Rückgängig (Strg+Z) rückgängig gemacht werden.",
+                "Alle BIN → CSV – Rückfrage",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+
+            if (confirm != DialogResult.Yes) return;
+
+            var snap = new MapSnapshotUndoAction(_maps);
+            int ok = 0, skip = 0;
+            foreach (var map in _maps)
+            {
+                if (_binFlash.ReadMapValuesIntoMap(map)) ok++;
+                else                                     skip++;
+            }
+            snap.CaptureAfterState();
+            _undo.Push(snap);
+
+            if (_currentMap != null) { RenderMap(_currentMap); RenderBinMap(_currentMap); }
+            UpdatePowerEstimate();
+            MessageBox.Show(
+                $"{ok} Map(s) übernommen, {skip} übersprungen (keine Adresse).\n" +
+                "Vergiss nicht, die CSVs zu speichern (Datei → Speichern).",
+                "Alle BIN → CSV",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+
         private void SaveMapAsMod()
         {
             if (_currentMap == null) return;
@@ -1390,16 +1717,56 @@ namespace ECM_Stage_Helper_Tool
         private void BtnResetMap_Click(object sender, EventArgs e)
         {
             if (_currentMap == null) return;
-            if (MessageBox.Show($"Map '{_currentMap.Name}' vollständig zurücksetzen?", "Bestätigung",
-                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+
+            bool canUseBin = _binFlash != null &&
+                             _binFlash.ReadMapValues(_currentMap) != null;
+
+            DialogResult choice;
+            if (canUseBin)
             {
-                var snapshotAction = new MapSnapshotUndoAction(new[] { _currentMap });
-                _currentMap.ResetAll();
-                snapshotAction.CaptureAfterState();
-                _undo.Push(snapshotAction);
-                RenderMap(_currentMap);
-                if (_binFlash != null) RenderBinMap(_currentMap);
+                choice = MessageBox.Show(
+                    $"Map '{_currentMap.Name}' zurücksetzen auf:\n\n" +
+                    "  [Ja]           = CSV-Originalwerte\n" +
+                    "  [Nein]         = BIN-Werte\n" +
+                    "  [Abbrechen]    = Abbrechen",
+                    "Zurücksetzen – Quelle wählen",
+                    MessageBoxButtons.YesNoCancel,
+                    MessageBoxIcon.Question);
             }
+            else
+            {
+                choice = MessageBox.Show(
+                    $"Map '{_currentMap.Name}' auf CSV-Originalwerte zurücksetzen?",
+                    "Bestätigung",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question) == DialogResult.Yes
+                    ? DialogResult.Yes : DialogResult.Cancel;
+            }
+
+            if (choice == DialogResult.Cancel) return;
+
+            var snapshotAction = new MapSnapshotUndoAction(new[] { _currentMap });
+
+            if (choice == DialogResult.Yes)
+            {
+                _currentMap.ResetAll();
+            }
+            else // DialogResult.No → BIN-Werte
+            {
+                if (!_binFlash.ReadMapValuesIntoMap(_currentMap))
+                {
+                    MessageBox.Show(
+                        "BIN-Werte konnten nicht gelesen werden.",
+                        "Fehler", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+            }
+
+            snapshotAction.CaptureAfterState();
+            _undo.Push(snapshotAction);
+            RenderMap(_currentMap);
+            if (_binFlash != null) RenderBinMap(_currentMap);
+            UpdatePowerEstimate();
         }
 
         private void BtnResetCell_Click(object sender, EventArgs e)
@@ -1419,6 +1786,25 @@ namespace ECM_Stage_Helper_Tool
             _currentMap.ResetCell(row, mapCol);
             RefreshCell(row, mapCol);
             if (_binFlash != null) RenderBinMap(_currentMap);
+            UpdatePowerEstimate();
+        }
+
+        // -----------------------------------------------------------------------
+        // Hilfsmethoden
+        // -----------------------------------------------------------------------
+
+        // -----------------------------------------------------------------------
+        // Leistungsschätzung
+        // -----------------------------------------------------------------------
+
+        private void UpdatePowerEstimate()
+        {
+            if (_maps.Count == 0) return;
+            var result = PowerEstimator.Calculate(_maps);
+            _lblPower.Text      = result.FormatSummary();
+            _lblPower.ForeColor = result.HasData
+                ? System.Drawing.Color.FromArgb(80, 200, 80)
+                : System.Drawing.Color.DimGray;
         }
 
         // -----------------------------------------------------------------------
@@ -1454,12 +1840,48 @@ namespace ECM_Stage_Helper_Tool
             {
                 _panel3D.SetMap(_currentMap);
                 _panel3D.SetOriginalView(_showingOriginal);
+                _panel3D.CellSelected -= Panel3D_CellSelected; // doppeltes Registrieren verhindern
+                _panel3D.CellSelected += Panel3D_CellSelected;
+                _panel3D.KeyDown      -= Panel3D_KeyDown;
+                _panel3D.KeyDown      += Panel3D_KeyDown;
+                _panel3D.KeyUp        -= Panel3D_KeyUp;
+                _panel3D.KeyUp        += Panel3D_KeyUp;
+                _panel3D.Focus();
             }
             else
             {
                 // Zurück zur Tabelle: DGV mit aktuellem Zustand füllen
                 RenderMap(_currentMap);
             }
+        }
+
+        private void Panel3D_CellSelected(int row, int col)
+        {
+            // Zelle selektiert → Panel bekommt Fokus damit +/- funktioniert
+            _panel3D.Focus();
+        }
+
+        private void Panel3D_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (_show3D && _currentMap != null && !_showingOriginal &&
+                _panel3D.SelectedRow >= 0 && _panel3D.SelectedCol >= 0)
+            {
+                bool isPlus  = e.KeyCode == Keys.Add      || e.KeyCode == Keys.Oemplus;
+                bool isMinus = e.KeyCode == Keys.Subtract || e.KeyCode == Keys.OemMinus;
+                if (isPlus || isMinus)
+                {
+                    StepCell(isPlus ? +1 : -1);
+                    e.Handled = true;
+                    UpdatePowerEstimate();
+                }
+            }
+        }
+
+        private void Panel3D_KeyUp(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Add || e.KeyCode == Keys.Oemplus ||
+                e.KeyCode == Keys.Subtract || e.KeyCode == Keys.OemMinus)
+                CommitStep();
         }
 
         // -----------------------------------------------------------------------

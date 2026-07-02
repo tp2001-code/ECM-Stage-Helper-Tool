@@ -49,22 +49,6 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="AiRemap\AiRemapClient.cs" />
-    <Compile Include="AiRemap\AiRemapLogger.cs" />
-    <Compile Include="AiRemap\RemapEngine.cs" />
-    <Compile Include="AiRemap\AiRemapWizard.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="AiRemap\AiRemapWizard.Designer.cs">
-      <DependentUpon>AiRemapWizard.cs</DependentUpon>
-    </Compile>
-    <Compile Include="AiRemap\ApiKeyDialog.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="AiRemap\ApiKeyDialog.Designer.cs">
-      <DependentUpon>ApiKeyDialog.cs</DependentUpon>
-    </Compile>
-    <Compile Include="AiRemap\RemapProposal.cs" />
     <Compile Include="BinFlash.cs" />
     <Compile Include="BufferedDataGridView.cs">
       <SubType>Component</SubType>
