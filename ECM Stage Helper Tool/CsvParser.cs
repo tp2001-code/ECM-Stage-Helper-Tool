@@ -11,7 +11,7 @@ namespace ECM_Stage_Helper_Tool
     /// Lädt und speichert ECM-Kennfeld-CSVs im ECM Titanium Export-Format.
     /// Format:
     ///   1. Optionale Metadaten-Zeilen (z.B. "Size: 16x14", "MAP: ...", werden übersprungen)
-    ///   2. Achsen-Header: Feld[0] = Beschriftung (z.B. "RPM|hPa"), Feld[1..n] = X-Achsenwerte
+    ///   2. Achsen-Header: Feld[0] = Beschriftung (z.B. "RPM|hPa" oder "|" = kein Label), Feld[1..n] = X-Achsenwerte
     ///   3. Datenzeilen:   Feld[0] = Y-Achsenwert, Feld[1..n] = Zellwerte
     /// Unterstützt Semikolon und Komma als Trennzeichen sowie Punkt/Komma als Dezimaltrennzeichen.
     /// </summary>
@@ -25,8 +25,8 @@ namespace ECM_Stage_Helper_Tool
                     .Where(l => !string.IsNullOrWhiteSpace(l))
                     .ToArray();
 
-                if (lines.Length < 2)
-                    throw new InvalidDataException("CSV muss mindestens eine Achsenzeile und eine Datenzeile enthalten.");
+                if (lines.Length < 1)
+                    throw new InvalidDataException("CSV ist leer.");
 
                 char sep = DetectSeparator(lines);
 
@@ -66,14 +66,27 @@ namespace ECM_Stage_Helper_Tool
                 }
 
                 if (dataStart < 0)
+                {
+                    // --- Sonderfall: Ein-Zellen-CSV (einzelner Skalarwert ohne X/Y-Achsen) ---
+                    if (TryParseScalar(lines, out double scalar))
+                        return new MapModel(path,
+                            new double[] { 0 },          // Dummy-X-Achse
+                            new double[] { 0 },          // Dummy-Y-Achse
+                            new double[,] { { scalar } },
+                            sizeString, axisLabel: null, mapName: mapName, unit: unit, isScalar: true);
+
                     throw new InvalidDataException("Keine Achsen-Header-Zeile gefunden (zweites Feld muss numerisch sein).");
+                }
 
                 // --- X-Achse aus der Daten-Header-Zeile (erstes Feld = Achsenbeschriftung) ---
                 var headerFields = SplitLine(lines[dataStart], sep);
                 if (headerFields.Length < 2)
                     throw new InvalidDataException("Erste CSV-Zeile enthält keine X-Achsenwerte.");
 
-                string axisLabel = headerFields[0].Length > 0 ? headerFields[0] : null;
+                // "|" alleinstehend = kein Achslabel (ECM Titanium Platzhalter)
+                string axisLabel = (headerFields[0].Length > 0 && headerFields[0] != "|")
+                    ? headerFields[0]
+                    : null;
 
                 var xList = new List<double>();
                 for (int i = 1; i < headerFields.Length; i++)
@@ -125,6 +138,27 @@ namespace ECM_Stage_Helper_Tool
         public static void SaveMap(MapModel map, string path)
         {
             var sb = new StringBuilder();
+
+            // --- Sonderfall: Ein-Zellen-CSV (nur Skalarwert, keine Achsen) ---
+            if (map.IsScalar)
+            {
+                // Nur echte Metazeilen (Size/MAP/Unit) aus dem Original uebernehmen
+                if (File.Exists(map.FilePath))
+                {
+                    foreach (string origLine in File.ReadAllLines(map.FilePath, Encoding.Default))
+                    {
+                        string t = origLine.Trim();
+                        if (t.StartsWith("Size:", StringComparison.OrdinalIgnoreCase) ||
+                            t.StartsWith("MAP",   StringComparison.OrdinalIgnoreCase) ||
+                            t.StartsWith("Unit:", StringComparison.OrdinalIgnoreCase))
+                            sb.AppendLine(origLine);
+                    }
+                }
+                sb.AppendLine(map.Values[0, 0].ToString(new CultureInfo("de-DE")));
+                File.WriteAllText(path, sb.ToString(), Encoding.Default);
+                return;
+            }
+
             char sep = ';'; // ECM-Titanium-Format: Semikolon als Trenner
 
             // --- Metadaten-Zeilen aus der Originaldatei übernehmen ---
@@ -148,7 +182,8 @@ namespace ECM_Stage_Helper_Tool
             var numCulture = sep == ';' ? new CultureInfo("de-DE") : CultureInfo.InvariantCulture;
 
             // --- Achsen-Header: Beschriftung + X-Achse ---
-            sb.Append(map.AxisLabel ?? string.Empty);
+            // Kein Label → "|" als Platzhalter schreiben (ECM Titanium Format)
+            sb.Append(map.AxisLabel ?? "|");
             for (int c = 0; c < map.Cols; c++)
             {
                 sb.Append(sep);
@@ -175,10 +210,17 @@ namespace ECM_Stage_Helper_Tool
 
         private static char DetectSeparator(string[] lines)
         {
-            // Erste Zeile mit mindestens 2 Semikolons gewinnt (dt. CSV-Format: ; = Spalte, , = Dezimal)
+            // Semikolon als Trenner erkannt, wenn mindestens eine Zeile ≥1 Semikolon enthält.
+            // In dt. CSV-Format: ; = Spaltentrenner, , = Dezimaltrenner (niemals Feldtrenner).
             foreach (string line in lines)
             {
-                if (line.Count(ch => ch == ';') >= 2)
+                // Metadaten-Zeilen überspringen (könnten zufällig ; enthalten)
+                if (line.StartsWith("Size:", StringComparison.OrdinalIgnoreCase) ||
+                    line.StartsWith("MAP",   StringComparison.OrdinalIgnoreCase) ||
+                    line.StartsWith("Unit:", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (line.Contains(';'))
                     return ';';
             }
             // Fallback: Komma als Trennzeichen
@@ -207,6 +249,31 @@ namespace ECM_Stage_Helper_Tool
             result.Add(current.ToString().Trim());
             return result.ToArray();
         }
+
+        /// <summary>
+        /// Versucht aus den CSV-Zeilen einen einzelnen Skalarwert zu lesen.
+        /// Metadaten-Zeilen (Size, MAP, Unit) werden übersprungen.
+        /// Anwendungsfall: CSV enthält nur einen Wert ohne Achsenstruktur.
+        /// </summary>
+        private static bool TryParseScalar(string[] lines, out double scalar)
+        {
+            scalar = 0;
+            foreach (string line in lines)
+            {
+                string trimmed = line.Trim();
+
+                // Metadaten-Zeilen überspringen
+                if (trimmed.StartsWith("Size:", StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.StartsWith("MAP",   StringComparison.OrdinalIgnoreCase) ||
+                    trimmed.StartsWith("Unit:", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                // Erste nicht-leere, nicht-Meta-Zeile als Skalar parsen
+                if (!string.IsNullOrWhiteSpace(trimmed) && TryParseDouble(trimmed, out scalar))
+                    return true;
+            }
+            return false;
+        }   
 
         private static bool TryParseDouble(string s, out double value)
         {

@@ -24,6 +24,12 @@ namespace ECM_Stage_Helper_Tool
         /// <summary>Achsenbeschriftung aus der CSV-Headerzeile (z.B. "RPM|mm3/Stk"), kann null sein.</summary>
         public string AxisLabel { get; private set; }
 
+        /// <summary>
+        /// True, wenn die CSV nur einen einzelnen Skalarwert ohne X/Y-Achsen enthielt
+        /// (wird als 1x1-Zelle dargestellt).
+        /// </summary>
+        public bool IsScalar { get; private set; }
+
         /// <summary>X-Achse (Spaltenköpfe), Länge = Cols</summary>
         public double[] XAxis { get; set; }
 
@@ -44,13 +50,14 @@ namespace ECM_Stage_Helper_Tool
         public int Rows => YAxis.Length;
         public int Cols => XAxis.Length;
 
-        public MapModel(string filePath, double[] xAxis, double[] yAxis, double[,] values, string sizeString = null, string axisLabel = null, string mapName = null, string unit = null)
+        public MapModel(string filePath, double[] xAxis, double[] yAxis, double[,] values, string sizeString = null, string axisLabel = null, string mapName = null, string unit = null, bool isScalar = false)
         {
             FilePath = filePath;
             SizeString = sizeString;
             AxisLabel = axisLabel;
             MapName = mapName;
             Unit = unit;
+            IsScalar = isScalar;
             XAxis = (double[])xAxis.Clone();
             YAxis = (double[])yAxis.Clone();
             Values = (double[,])values.Clone();

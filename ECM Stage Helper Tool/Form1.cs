@@ -64,6 +64,7 @@ namespace ECM_Stage_Helper_Tool
 
         private void MiNew_Click(object sender, EventArgs e)   => ResetAll();
         private void MiOpen_Click(object sender, EventArgs e)   => OpenCsvFolder();
+        private void MiUnloadCsv_Click(object sender, EventArgs e) => UnloadAllCsv();
         private void MiExit_Click(object sender, EventArgs e)   => Close();
         private void MiToggle_Click(object sender, EventArgs e) => ToggleOriginalView();
         private void MiUndo_Click(object sender, EventArgs e)   => ExecuteUndo();
@@ -274,7 +275,7 @@ namespace ECM_Stage_Helper_Tool
                 return true;
             }
             // + / -: ausgewählte Zelle um 1 erhöhen / verringern
-            bool isPlus  = keyData == Keys.Add      || keyData == Keys.Oemplus;
+            bool isPlus  = keyData == Keys.Add      || keyData == Keys.Oemplus || keyData == (Keys.Oemplus | Keys.Shift);
             bool isMinus = keyData == Keys.Subtract || keyData == Keys.OemMinus;
             if ((isPlus || isMinus) && _currentMap != null && !_showingOriginal)
             {
@@ -694,6 +695,36 @@ namespace ECM_Stage_Helper_Tool
             _undo.Clear();
 
             _miSaveBin.Enabled = false;
+            Text = "ECM Stage Helper – Kennfeld Remapping";
+            SetUiForNoMap();
+        }
+
+        /// <summary>Alle CSV-Maps aus dem Speicher entladen (ohne BIN zu beeinflussen).</summary>
+        private void UnloadAllCsv()
+        {
+            if (_maps.Count == 0) return;
+
+            bool csvModified = _maps.Any(m => m.ModifiedCells.Count > 0);
+            if (csvModified)
+            {
+                var ans = MessageBox.Show(
+                    "Es gibt ungespeicherte CSV-Änderungen.\nTrotzdem alle CSV entladen?",
+                    "Ungespeicherte Änderungen",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+                if (ans != DialogResult.Yes) return;
+            }
+
+            _maps.Clear();
+            _lbMaps.Items.Clear();
+            _currentMap = null;
+            _csvFolder = null;
+            _showingOriginal = false;
+            _clipboard = null;
+            _dgv.Columns.Clear();
+            _dgv.Rows.Clear();
+            _undo.Clear();
+
             Text = "ECM Stage Helper – Kennfeld Remapping";
             SetUiForNoMap();
         }
@@ -1171,9 +1202,10 @@ namespace ECM_Stage_Helper_Tool
                     ? $"> {lo.ToString(_deDe)}"
                     : $"{lo.ToString(_deDe)} – {hi.ToString(_deDe)}";
 
-            string input = PromptDialog.Show(
+            var (input, rescale) = PromptDialog.ShowWithOption(
                 $"Neuen X-Wert für Spalte {mapCol} (aktuell: {current})\nErlaubter Bereich: {hint}",
-                "X-Achse ändern");
+                "X-Achse ändern",
+                "Zellenwerte proportional umrechnen (Dreisatz)");
             if (input == null) return;
 
             if (!TryParseDouble(input, out double newX))
@@ -1197,8 +1229,27 @@ namespace ECM_Stage_Helper_Tool
             {
                 var affected = _maps.Where(m => m == _currentMap || m.Cols == _currentMap.Cols);
                 var snapshotAction = new MapSnapshotUndoAction(affected);
-                Remapper.ChangeXAxis(_currentMap, mapCol, newX);
-                Remapper.PropagateXAxisChange(_maps, _currentMap, mapCol, newX);
+
+                if (rescale)
+                {
+                    double oldX = x[mapCol];
+                    if (Math.Abs(oldX) > 1e-12)
+                    {
+                        double factor = newX / oldX;
+                        for (int r = 0; r < _currentMap.Rows; r++)
+                        {
+                            _currentMap.Values[r, mapCol] = _currentMap.Values[r, mapCol] * factor;
+                            _currentMap.MarkCellModified(r, mapCol);
+                        }
+                    }
+                    x[mapCol] = newX;
+                }
+                else
+                {
+                    Remapper.ChangeXAxis(_currentMap, mapCol, newX);
+                    Remapper.PropagateXAxisChange(_maps, _currentMap, mapCol, newX);
+                }
+
                 snapshotAction.CaptureAfterState();
                 _undo.Push(snapshotAction);
                 RenderMap(_currentMap);
@@ -1224,9 +1275,10 @@ namespace ECM_Stage_Helper_Tool
                     ? $"> {lo.ToString(_deDe)}"
                     : $"{lo.ToString(_deDe)} – {hi.ToString(_deDe)}";
 
-            string input = PromptDialog.Show(
+            var (input, rescale) = PromptDialog.ShowWithOption(
                 $"Neuen Y-Wert für Zeile {row} (aktuell: {current})\nErlaubter Bereich: {hint}",
-                "Y-Achse ändern");
+                "Y-Achse ändern",
+                "Zellenwerte proportional umrechnen (Dreisatz)");
             if (input == null) return;
 
             if (!TryParseDouble(input, out double newY))
@@ -1249,8 +1301,27 @@ namespace ECM_Stage_Helper_Tool
             {
                 var affected = _maps.Where(m => m == _currentMap || m.Rows == _currentMap.Rows);
                 var snapshotAction = new MapSnapshotUndoAction(affected);
-                Remapper.ChangeYAxis(_currentMap, row, newY);
-                Remapper.PropagateYAxisChange(_maps, _currentMap, row, newY);
+
+                if (rescale)
+                {
+                    double oldY = y[row];
+                    if (Math.Abs(oldY) > 1e-12)
+                    {
+                        double factor = newY / oldY;
+                        for (int c = 0; c < _currentMap.Cols; c++)
+                        {
+                            _currentMap.Values[row, c] = _currentMap.Values[row, c] * factor;
+                            _currentMap.MarkCellModified(row, c);
+                        }
+                    }
+                    y[row] = newY;
+                }
+                else
+                {
+                    Remapper.ChangeYAxis(_currentMap, row, newY);
+                    Remapper.PropagateYAxisChange(_maps, _currentMap, row, newY);
+                }
+
                 snapshotAction.CaptureAfterState();
                 _undo.Push(snapshotAction);
                 RenderMap(_currentMap);

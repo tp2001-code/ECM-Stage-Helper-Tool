@@ -1,22 +1,21 @@
 using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace ECM_Stage_Helper_Tool.AiRemap
 {
     /// <summary>
-    /// 3-Schritt-Wizard für das KI-gestützte Remap:
-    ///   Schritt 1 – Analyse:  Claude ermittelt Max-Einspritzmenge, Max-Leistung, Max-Nm
+    /// 3-Schritt-Wizard für das lokale Remap:
+    ///   Schritt 1 – Analyse:  Lokale Berechnung von Max-Einspritzmenge, Max-Leistung, Max-Nm
     ///   Schritt 2 – Zielwert: Benutzer gibt Ziel-Einspritzmenge ein, Vorschau der erwarteten Leistung
-    ///   Schritt 3 – Remap:   Claude berechnet neue Werte, Änderungen werden temporär (rot) eingetragen
+    ///   Schritt 3 – Remap:   RemapEngine berechnet neue Werte, Änderungen werden temporär (rot) eingetragen
     /// </summary>
     public partial class AiRemapWizard : Form
     {
         private readonly List<MapModel> _maps;
-        private AiRemapClient           _client;
         private AnalysisResult          _analysis;
         private RemapResult             _remapResult;
 
@@ -43,16 +42,12 @@ namespace ECM_Stage_Helper_Tool.AiRemap
         // Schritt 1 – Analyse
         // -----------------------------------------------------------------------
 
-        private async void BtnAnalyse_Click(object sender, EventArgs e)
+        private void BtnAnalyse_Click(object sender, EventArgs e)
         {
-            string key = EnsureApiKey();
-            if (key == null) return;
-
-            _client = new AiRemapClient(key);
-            SetBusy(true, "Analysiere Maps mit Claude…");
+            SetBusy(true, "Analysiere Maps…");
             try
             {
-                _analysis = await _client.AnalyseAsync(_maps);
+                _analysis = AiRemapClient.AnalyseLocal(_maps);
                 PopulateAnalysis();
                 ShowStep(2);
             }
@@ -60,11 +55,8 @@ namespace ECM_Stage_Helper_Tool.AiRemap
             {
                 AiRemapLogger.LogError("BtnAnalyse_Click", ex);
                 MessageBox.Show(
-                    $"Fehler bei der Analyse:\n{ex.Message}\n\nDetails wurden in die Log-Datei geschrieben.",
+                    $"Fehler bei der Analyse:\n{ex.Message}",
                     "Fehler", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                if (MessageBox.Show("Log-Datei öffnen?", "Log", MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question) == DialogResult.Yes)
-                    AiRemapLogger.OpenLogFile();
             }
             finally { SetBusy(false); }
         }
@@ -87,7 +79,7 @@ namespace ECM_Stage_Helper_Tool.AiRemap
             if (_analysis.MaxBoostHpa > 0)
             {
                 _lblCurrentBoost.Text    = $"(aktuell: {_analysis.MaxBoostHpa:F0})";
-                _numLimitBoost.Value     = (decimal)Math.Round(_analysis.MaxBoostHpa * 1.15, 0);
+                _numLimitBoost.Value     = 0; // 0 = automatisch (Lambda-basiert)
             }
             if (_analysis.MaxRailPressureBar > 0)
             {
@@ -114,8 +106,17 @@ namespace ECM_Stage_Helper_Tool.AiRemap
             if (_analysis == null) return;
             double target = (double)_numTargetFuel.Value;
             double ratio  = _analysis.MaxFuelQuantity > 0 ? target / _analysis.MaxFuelQuantity : 1.0;
-            double newKw  = _analysis.MaxPowerKw  * ratio;
             double newNm  = _analysis.MaxTorqueNm * ratio;
+
+            // Durch Nm-Limit begrenzen (physisches Motorlimit)
+            double nmLimit = (double)_numLimitNm.Value;
+            if (nmLimit > 0 && newNm > nmLimit)
+                newNm = nmLimit;
+
+            // Leistung: Nm bei MaxTorqueRpm, PS separat bei MaxPowerRpm
+            // Effektive Leistungssteigerung = MIN(ratio, nmLimit/OrigNm)
+            double effectiveRatio = _analysis.MaxTorqueNm > 0 ? newNm / _analysis.MaxTorqueNm : 1.0;
+            double newKw = _analysis.MaxPowerKw * effectiveRatio;
             _lblExpPower.Text = $"≈ {newKw:F1} kW  /  {newKw * 1.36:F0} PS";
             _lblExpNm.Text    = $"≈ {newNm:F1} Nm";
         }
@@ -160,14 +161,14 @@ namespace ECM_Stage_Helper_Tool.AiRemap
         {
             if (mr == null)
             {
-                // Vor dem API-Call: "wird verarbeitet"
+                // Vor der Berechnung: "wird verarbeitet"
                 SetBusy(true, $"[{_appliedCount + 1}] Berechne: {fileName}");
                 MarkConfirmListItem(fileName, "  [...] ");
                 Application.DoEvents();
                 return;
             }
 
-            // Nach dem API-Call: Map wurde bereits von RemapEngine direkt modifiziert
+            // Map wurde von RemapEngine direkt modifiziert
             bool changed = success && _maps.Any(m =>
                 string.Equals(m.Name, fileName, StringComparison.OrdinalIgnoreCase) &&
                 m.ModifiedCells.Count > 0);
@@ -180,11 +181,11 @@ namespace ECM_Stage_Helper_Tool.AiRemap
             Application.DoEvents();
         }
 
-        private async void BtnExecuteRemap_Click(object sender, EventArgs e)
+        private void BtnExecuteRemap_Click(object sender, EventArgs e)
         {
             double target = (double)_numTargetFuel.Value;
             _appliedCount = 0;
-            SetBusy(true, "Starte KI-Remap...");
+            SetBusy(true, "Berechne Remap...");
             try
             {
                 var limits = new RemapLimits
@@ -192,11 +193,12 @@ namespace ECM_Stage_Helper_Tool.AiRemap
                     TargetFuelMm3      = target,
                     MaxBoostHpa        = (double)_numLimitBoost.Value,
                     MaxRailPressureBar = (double)_numLimitRail.Value,
-                    MaxTorqueNm        = (double)_numLimitNm.Value
+                    MaxTorqueNm        = (double)_numLimitNm.Value,
+                    LambdaWindow       = (double)_numLambdaWindow.Value
                 };
                 AiRemapLogger.LogInfo($"Limits: Boost={limits.MaxBoostHpa:F0} hPa, Rail={limits.MaxRailPressureBar:F0} bar, Nm={limits.MaxTorqueNm:F0}");
 
-                _remapResult = await _client.RemapAsync(_maps, target, _analysis, OnMapDone, limits);
+                _remapResult = AiRemapClient.RemapLocal(_maps, target, _analysis, OnMapDone, limits);
 
                 MessageBox.Show(
                     $"Remap abgeschlossen!\n\n" +
@@ -204,7 +206,7 @@ namespace ECM_Stage_Helper_Tool.AiRemap
                     $"Erwartete Leistung: {_remapResult.ExpectedPowerKw:F1} kW / {_remapResult.ExpectedPowerPs:F0} PS\n" +
                     $"Erwartetes Drehmoment: {_remapResult.ExpectedTorqueNm:F1} Nm\n\n" +
                     "Die Aenderungen sind rot markiert. Bitte pruefen und dann speichern oder in BIN schreiben.",
-                    "KI-Remap abgeschlossen",
+                    "Remap abgeschlossen",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
 
                 DialogResult = DialogResult.OK;
@@ -214,11 +216,8 @@ namespace ECM_Stage_Helper_Tool.AiRemap
             {
                 AiRemapLogger.LogError("BtnExecuteRemap_Click", ex);
                 MessageBox.Show(
-                    $"Fehler beim Remap:\n{ex.Message}\n\nDetails wurden in die Log-Datei geschrieben.",
+                    $"Fehler beim Remap:\n{ex.Message}",
                     "Fehler", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                if (MessageBox.Show("Log-Datei öffnen?", "Log", MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question) == DialogResult.Yes)
-                    AiRemapLogger.OpenLogFile();
             }
             finally { SetBusy(false); }
         }
@@ -229,18 +228,7 @@ namespace ECM_Stage_Helper_Tool.AiRemap
         // Hilfsmethoden
         // -----------------------------------------------------------------------
 
-        private static string EnsureApiKey()
-        {
-            string token = ApiKeyDialog.GetSavedKey();
-            if (!string.IsNullOrEmpty(token)) return token;
 
-            using (var dlg = new ApiKeyDialog())
-            {
-                if (dlg.ShowDialog() == DialogResult.OK)
-                    return dlg.ApiKey;
-            }
-            return null;
-        }
 
         private void SetBusy(bool busy, string message = "")
         {

@@ -1,129 +1,121 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Net.Http;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ECM_Stage_Helper_Tool.AiRemap
 {
     /// <summary>
-    /// Kommuniziert direkt mit der Anthropic Claude REST API.
-    /// BenÃ¶tigt einen Anthropic API-Key (console.anthropic.com).
-    ///   Phase 1 â€“ Analyse: ermittelt Max-Einspritzmenge, Max-Leistung, Max-Nm
-    ///   Phase 2 â€“ Remap:   berechnet neue Map-Werte fÃ¼r eine Ziel-Einspritzmenge
+    /// Lokale Remap-Berechnung fuer EA189 2.0 TDI (EDC17).
+    /// Kein API-Key noetig � alle Berechnungen erfolgen offline.
     /// </summary>
-    public class AiRemapClient
+    public static class AiRemapClient
     {
-        private const string ApiUrl     = "https://api.anthropic.com/v1/messages";
-        private const string ApiVersion = "2023-06-01";
-        private const string Model      = "claude-sonnet-4-5";
-        private const int    MaxTokens  = 16000;
+        // Physikalische Konstanten
+        private const double DieselDensity = 0.832;       // g/cm� ? mm� � 0.832 = mg
+        private const double PsConstant    = 7120.6;      // PS = (Nm � RPM) / 7120.6
+        private const double KwConstant    = 9549.3;      // kW = (Nm � RPM) / 9549.3
+        private const double StoichAfr     = 14.5;        // Stoechiometrisches Luft-Kraftstoff-Verhaeltnis Diesel
+        private const double LambdaLimit   = 1.15;        // Min. Lambda fuer rauchfreie Verbrennung
 
-        private readonly string _apiKey;
-        private static readonly HttpClient _http = new HttpClient
-        {
-            Timeout = System.TimeSpan.FromMinutes(10)
-        };
+        // Stuetzstellen: RPM ? IQ-zu-indiziertes-Nm Faktor
+        private static readonly double[] FactorRpm = { 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500 };
+        private static readonly double[] FactorVal = { 5.80, 5.80, 5.75, 5.70, 5.50, 5.20, 4.80, 4.50 };
 
-        public AiRemapClient(string apiKey)
+        // Stuetzstellen: RPM ? Reibungsverluste (Nm)
+        private static readonly double[] FrictionRpm = { 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500 };
+        private static readonly double[] FrictionVal = {   30,   35,   40,   45,   48,   52,   55,   58 };
+
+        /// <summary>Lineare Interpolation in einer Stuetzstellen-Tabelle.</summary>
+        private static double InterpolatePhysics(double[] xTable, double[] yTable, double x)
         {
-            _apiKey = apiKey;
+            if (x <= xTable[0]) return yTable[0];
+            if (x >= xTable[xTable.Length - 1]) return yTable[yTable.Length - 1];
+            for (int i = 1; i < xTable.Length; i++)
+            {
+                if (x <= xTable[i])
+                {
+                    double frac = (x - xTable[i - 1]) / (xTable[i] - xTable[i - 1]);
+                    return yTable[i - 1] + frac * (yTable[i] - yTable[i - 1]);
+                }
+            }
+            return yTable[yTable.Length - 1];
         }
 
         // -----------------------------------------------------------------------
-        // Phase 1 â€“ Analyse
+        // Phase 1 � Analyse (komplett lokal)
         // -----------------------------------------------------------------------
 
-        public async Task<AnalysisResult> AnalyseAsync(IEnumerable<MapModel> maps)
+        public static AnalysisResult AnalyseLocal(IEnumerable<MapModel> maps)
         {
             var mapList = maps.ToList();
 
-            // ---------------------------------------------------------------
-            // Lokale Vorberechnung â€“ kein Verlass auf KI fÃ¼r kritische Werte
-            // ---------------------------------------------------------------
-            double localMaxFuel        = CalcMaxFuelFromLimiter(mapList);
-            double localMaxTorque      = CalcMaxTorqueFromLimiter(mapList);
-            double localMaxTorqueRpm   = CalcMaxTorqueRpm(mapList);
-            double localMaxBoost       = CalcMaxBoost(mapList);
+            double localMaxFuel         = CalcMaxFuelFromLimiter(mapList);
+            double localMaxTorque       = CalcMaxTorqueFromLimiter(mapList);
+            double localMaxTorqueRpm    = CalcMaxTorqueRpm(mapList);
+            double localMaxBoost        = CalcMaxBoost(mapList);
             double localMaxRailPressure = CalcMaxRailPressure(mapList);
-            double localMaxPowerKw = localMaxTorque > 0 && localMaxTorqueRpm > 0
-                ? (localMaxTorque * localMaxTorqueRpm) / 9549.3
-                : 0;
-            double localMaxPowerPs = localMaxTorque > 0 && localMaxTorqueRpm > 0
-                ? (localMaxTorque * localMaxTorqueRpm) / 7023.5
-                : 0;
+
+            var powerResult      = CalcMaxPower(mapList);
+            double localMaxPowerKw  = powerResult.kw;
+            double localMaxPowerPs  = powerResult.ps;
+            double localMaxPowerRpm = powerResult.rpm;
 
             AiRemapLogger.LogInfo(
-                $"Lokale Vorberechnung: MaxFuel={localMaxFuel:F2}, MaxTorque={localMaxTorque:F1} Nm @ {localMaxTorqueRpm:F0} RPM, " +
+                $"Lokale Analyse: MaxFuel={localMaxFuel:F2}, MaxTorque={localMaxTorque:F1} Nm @ {localMaxTorqueRpm:F0} RPM, " +
                 $"MaxPower={localMaxPowerKw:F1} kW / {localMaxPowerPs:F0} PS, MaxBoost={localMaxBoost:F0} hPa, MaxRail={localMaxRailPressure:F0} bar");
 
-            string mapsBlock = BuildMapsBlock(mapList);
-            AiRemapLogger.LogInfo($"Phase 1 Analyse - Maps-Block: {System.Text.Encoding.UTF8.GetByteCount(mapsBlock):N0} Bytes, {mapList.Count} Maps");
-            _currentPhase = "Phase-1-Analyse";
+            // MapsToChange lokal bestimmen
+            double lambdaXMax  = CalcLambdaFuelLimit(mapList);
+            double targetEst   = localMaxFuel * 1.25;
+            bool   needsLambda = targetEst > lambdaXMax;
+            var mapsToChange = mapList
+                .Where(m => NeedsRemap(m, targetEst, needsLambda))
+                .Select(m => m.Name)
+                .ToList();
 
-            string fileList = string.Join("\n", mapList.Select(m => "  - " + m.Name));
+            // Summary lokal generieren
+            string summary = $"EA189 2.0 TDI � Ist-Zustand: " +
+                $"{localMaxPowerKw:F1} kW / {localMaxPowerPs:F0} PS bei {localMaxPowerRpm:F0} RPM, " +
+                $"max. {localMaxTorque:F0} Nm bei {localMaxTorqueRpm:F0} RPM, " +
+                $"IQ={localMaxFuel:F1} mm3/Stk, Ladedruck={localMaxBoost:F0} hPa, " +
+                $"Raildruck={localMaxRailPressure:F0} bar.";
 
-            string systemPrompt =
-                "Du bist ein ECU-Tuning-Experte fuer Dieselmotoren. " +
-                "Du analysierst ECU-Kennfeld-Maps im CSV-Format und antwortest AUSSCHLIESSLICH mit validem JSON. " +
-                "Kein erklaerende Text, keine Markdown-Code-Bloecke, nur reines JSON.";
-
-            string userPrompt =
-                "WICHTIG: Verwende fuer 'maps_to_change' AUSSCHLIESSLICH diese exakten Dateinamen:\n" +
-                fileList + "\n\n" +
-                $"Die lokale Analyse ergibt bereits folgende Werte (verwende diese!):\n" +
-                $"  max_fuel_quantity = {localMaxFuel:F2} (aus 'Begrenzer Kraftstoffmenge.CSV')\n" +
-                $"  max_torque_nm = {localMaxTorque:F1} (aus 'Max. Drehmoment Begrenzer f(APS) #2.CSV')\n" +
-                $"  max_torque_rpm = {localMaxTorqueRpm:F0}\n" +
-                $"  max_power_kw = {localMaxPowerKw:F1} (berechnet: M x 2pi x n / 60)\n" +
-                $"  max_boost_hpa = {localMaxBoost:F0} (Volllast aus Ladedruck-Maps)\n" +
-                $"  max_rail_pressure_bar = {localMaxRailPressure:F0} (aus Raildruck-Maps)\n\n" +
-                "Analysiere die Maps und beantworte:\n" +
-                "1. Welche Maps angepasst werden muessen wenn die Einspritzmenge erhoeht wird\n" +
-                "2. Schreibe eine kurze deutsche Zusammenfassung des Ist-Zustands\n\n" +
-                "Antworte mit diesem JSON-Schema (alle Felder Pflicht):\n" +
-                "{\n" +
-                $"  \"max_fuel_quantity\": {localMaxFuel:F2},\n" +
-                "  \"fuel_unit\": \"mm3/Stk\",\n" +
-                $"  \"max_power_kw\": {localMaxPowerKw:F1},\n" +
-                $"  \"max_torque_nm\": {localMaxTorque:F1},\n" +
-                $"  \"max_torque_rpm\": {localMaxTorqueRpm:F0},\n" +
-                $"  \"max_power_rpm\": {localMaxTorqueRpm:F0},\n" +
-                $"  \"max_boost_hpa\": {localMaxBoost:F0},\n" +
-                $"  \"max_rail_pressure_bar\": {localMaxRailPressure:F0},\n" +
-                "  \"summary\": \"<kurze dt. Zusammenfassung>\",\n" +
-                "  \"maps_to_change\": [\"<exakter Dateiname>\", ...]\n" +
-                "}\n\n" +
-                "Maps zur Analyse:\n\n" + mapsBlock;
-
-            string json = await CallApiAsync(systemPrompt, userPrompt);
-            return ParseAnalysisResult(json);
+            return new AnalysisResult
+            {
+                MaxFuelQuantity    = localMaxFuel,
+                FuelUnit           = "mm3/Stk",
+                MaxPowerKw         = localMaxPowerKw,
+                MaxTorqueNm        = localMaxTorque,
+                MaxTorqueRpm       = localMaxTorqueRpm,
+                MaxPowerRpm        = localMaxPowerRpm,
+                MaxBoostHpa        = localMaxBoost,
+                MaxRailPressureBar = localMaxRailPressure,
+                Summary            = summary,
+                MapsToChange       = mapsToChange
+            };
         }
 
         // -----------------------------------------------------------------------
-        // Phase 2 - Remap (jede Map einzeln, sofort anwenden)
+        // Phase 2 � Remap (komplett lokal)
+        // -----------------------------------------------------------------------
 
-        public async Task<RemapResult> RemapAsync(IEnumerable<MapModel> maps, double targetFuel,
+        public static RemapResult RemapLocal(IEnumerable<MapModel> maps, double targetFuel,
             AnalysisResult analysis, Action<string, MapRemap, bool> mapDoneCallback = null,
             RemapLimits limits = null)
         {
             var mapList = maps.ToList();
-            _currentPhase = "Phase-2-Remap";
 
             double currentMax  = analysis.MaxFuelQuantity;
             double lambdaXMax  = CalcLambdaFuelLimit(mapList);
-            double newTorque   = analysis.MaxTorqueNm * (targetFuel / currentMax);
-            double newPowerKw  = (newTorque * analysis.MaxTorqueRpm) / 9549.3;
+            double ratio       = targetFuel / currentMax;
             bool   needsLambda = targetFuel > lambdaXMax;
 
-            AiRemapLogger.LogInfo($"Remap: {currentMax:F2} -> {targetFuel:F2} mm3/Hub, Faktor={targetFuel/currentMax:F4}");
+            AiRemapLogger.LogInfo($"Remap: {currentMax:F2} -> {targetFuel:F2} mm3/Hub, Faktor={targetFuel / currentMax:F4}");
 
             var result = new RemapResult
             {
-                ExpectedPowerKw  = newPowerKw,
-                ExpectedTorqueNm = newTorque,
+                ExpectedPowerKw  = 0,
+                ExpectedTorqueNm = 0,
                 Notes = $"Remap {currentMax:F2} -> {targetFuel:F2} mm3/Hub",
                 Maps  = new List<MapRemap>()
             };
@@ -133,7 +125,6 @@ namespace ECM_Stage_Helper_Tool.AiRemap
 
             foreach (var map in mapsToProcess)
             {
-                // Callback VOR dem API-Call: zeigt "wird verarbeitet..."
                 mapDoneCallback?.Invoke(map.Name, null, false);
 
                 AiRemapLogger.LogInfo($"Verarbeite: {map.Name}");
@@ -141,12 +132,21 @@ namespace ECM_Stage_Helper_Tool.AiRemap
                 bool success = false;
                 try
                 {
-                    mr = await ProcessSingleMapAsync(map, targetFuel, currentMax, lambdaXMax, needsLambda, limits);
-                    if (mr != null)
+                    var mapType = RemapEngine.Classify(map);
+                    AiRemapLogger.LogInfo($"  Klassifiziert als: {mapType}");
+
+                    bool changed = RemapEngine.Apply(map, currentMax, targetFuel, mapType, limits);
+
+                    mr = new MapRemap
                     {
-                        result.Maps.Add(mr);
-                        success = true;
-                    }
+                        FileName          = map.Name,
+                        ChangeDescription = $"{mapType}: {(changed ? "geaendert" : "unveraendert")}",
+                        NewXAxis          = map.XAxis,
+                        NewYAxis          = map.YAxis,
+                        NewValues         = map.Values
+                    };
+                    result.Maps.Add(mr);
+                    success = changed;
                 }
                 catch (Exception ex)
                 {
@@ -160,159 +160,57 @@ namespace ECM_Stage_Helper_Tool.AiRemap
                     result.Maps.Add(mr);
                 }
 
-                // Callback NACH dem API-Call: Map sofort anwenden + Haken setzen
                 mapDoneCallback?.Invoke(map.Name, mr, success);
             }
+
+            // Tatsaechliche Leistung nach Remap berechnen (mit physischen Caps)
+            var postPower = PowerEstimator.Calculate(mapList);
+            if (postPower.HasData)
+            {
+                result.ExpectedPowerKw  = postPower.MaxKw;
+                result.ExpectedTorqueNm = postPower.MaxNm;
+            }
+            else
+            {
+                // Fallback: linear begrenzt durch Nm-Limit
+                double nmLim = limits != null ? limits.EffectiveTorqueLimit : double.MaxValue;
+                double estNm = Math.Min(analysis.MaxTorqueNm * ratio, nmLim);
+                result.ExpectedTorqueNm = estNm;
+                result.ExpectedPowerKw  = (estNm * analysis.MaxPowerRpm) / KwConstant;
+            }
+
             return result;
         }
 
+        // -----------------------------------------------------------------------
+        // NeedsRemap
+        // -----------------------------------------------------------------------
+
         private static bool NeedsRemap(MapModel m, double targetFuel, bool needsLambda)
         {
-            string n    = m.Name.ToLowerInvariant();
+            string n    = (m.MapName ?? m.Name).ToLowerInvariant();
             string axis = (m.AxisLabel ?? "").ToLowerInvariant();
+            if (n.Contains("abgastemperatur"))                                return true;
             if (axis.Contains("mm3") && m.XAxis[m.Cols - 1] < targetFuel * 0.99) return true;
-            if (n.Contains("begrenzer") && n.Contains("kraftstoff"))             return true;
-            if (n.Contains("drehmoment") && n.Contains("begrenzer"))             return true;
-            if (n.Contains("ladedruck")  && n.Contains("begrenzer"))             return true;
-            if ((n.Contains("rauch") || n.Contains("lambda")) && needsLambda)    return true;
+            if (n.Contains("begrenzer") && n.Contains("kraftstoff"))          return true;
+            if (n.Contains("drehmoment") && n.Contains("begrenzer"))          return true;
+            if (n.Contains("ladedruck")  && n.Contains("begrenzer"))          return true;
+            if (n.Contains("raildruck"))                                      return true;
+            if ((n.Contains("rauch") || n.Contains("lambda")) && needsLambda) return true;
             return false;
         }
 
-        private async Task<MapRemap> ProcessSingleMapAsync(MapModel map, double targetFuel,
-            double currentMax, double lambdaXMax, bool needsLambda, RemapLimits limits = null)
-        {
-            RemapEngine.MapType mapType = await ClassifyMapAsync(map, targetFuel, currentMax);
-            AiRemapLogger.LogInfo($"  Klassifiziert als: {mapType}");
-
-            bool changed = RemapEngine.Apply(map, currentMax, targetFuel, mapType, limits);
-
-            return new MapRemap
-            {
-                FileName          = map.Name,
-                ChangeDescription = $"{mapType}: {(changed ? "geaendert" : "unveraendert")}",
-                NewXAxis          = map.XAxis,
-                NewYAxis          = map.YAxis,
-                NewValues         = map.Values
-            };
-        }
-
-        /// <summary>
-        /// Fragt Claude NUR nach dem Map-Typ (kurze Antwort, wenige Token).
-        /// Mathematik macht RemapEngine lokal.
-        /// </summary>
-        private async Task<RemapEngine.MapType> ClassifyMapAsync(MapModel map, double targetFuel, double currentMax)
-        {
-            // Zuerst lokal klassifizieren – meist korrekt und spart API-Aufruf
-            var localType = RemapEngine.Classify(map);
-            if (localType != RemapEngine.MapType.Unknown)
-            {
-                AiRemapLogger.LogInfo($"  Lokale Klassifizierung: {localType} (kein API-Call noetig)");
-                return localType;
-            }
-
-            // Nur bei Unknown: KI fragen
-            string systemPrompt =
-                "Du bist ein EDC17-Kennfeld-Klassifizierer. " +
-                "Antworte NUR mit einem einzigen Wort aus dieser Liste: " +
-                "FuelLimiter, InjectionMap, InjectionTiming, InjectionDuration, " +
-                "BoostMap, BoostLimiter, TorqueLimiter, RailPressure, SmokeLimit, Skip";
-
-            string userPrompt =
-                $"Kennfeld: {map.Name}\n" +
-                $"Einheit: {map.Unit ?? "?"}\n" +
-                $"Achse: {map.AxisLabel ?? "?"}\n" +
-                $"Letzter X-Wert: {map.XAxis[map.Cols-1]:F2}\n" +
-                $"Ziel-IQ: {targetFuel:F2} mg/Hub\n\n" +
-                "Welcher Typ ist dieses Kennfeld? Antworte NUR mit einem Wort.";
-
-            string response = (await CallApiAsync(systemPrompt, userPrompt)).Trim();
-            AiRemapLogger.LogInfo($"  KI-Klassifizierung Antwort: '{response}'");
-
-            if (Enum.TryParse<RemapEngine.MapType>(response, true, out var parsed))
-                return parsed;
-
-            return RemapEngine.MapType.Skip;
-        }
-
-        private static string BuildSingleMapBlock(MapModel map)
-        {
-            var sb = new StringBuilder();
-            sb.Append(map.AxisLabel ?? "Y\\X");
-            for (int c = 0; c < map.Cols; c++) sb.Append($";{map.XAxis[c]:F2}");
-            sb.AppendLine();
-            for (int r = 0; r < map.Rows; r++)
-            {
-                sb.Append($"{map.YAxis[r]:F2}");
-                for (int c = 0; c < map.Cols; c++) sb.Append($";{map.Values[r, c]:F4}");
-                sb.AppendLine();
-            }
-            return sb.ToString();
-        }
-
         // -----------------------------------------------------------------------
-        // HTTP-Aufruf
+        // Lokale Berechnungen
         // -----------------------------------------------------------------------
 
-        private async Task<string> CallApiAsync(string systemPrompt, string userPrompt)
-        {
-            var requestBody = new
-            {
-                model      = Model,
-                max_tokens = MaxTokens,
-                system     = systemPrompt,
-                messages   = new object[]
-                {
-                    new { role = "user", content = userPrompt }
-                }
-            };
-
-            string requestJson = SimpleJsonSerialize(requestBody);
-
-            // Logging â€“ Request
-            AiRemapLogger.LogRequest(_currentPhase, requestJson);
-
-            var content = new StringContent(requestJson, Encoding.UTF8, "application/json");
-
-            using (var request = new HttpRequestMessage(HttpMethod.Post, ApiUrl))
-            {
-                request.Headers.Add("x-api-key", _apiKey);
-                request.Headers.Add("anthropic-version", ApiVersion);
-                request.Content = content;
-
-                using (var response = await _http.SendAsync(request))
-                {
-                    string responseBody = await response.Content.ReadAsStringAsync();
-
-                    // Logging â€“ Response
-                    AiRemapLogger.LogResponse(_currentPhase, (int)response.StatusCode, responseBody);
-
-                    if (!response.IsSuccessStatusCode)
-                        throw new Exception($"Anthropic API Fehler {(int)response.StatusCode}: {responseBody}");
-
-                    return ExtractTextFromResponse(responseBody);
-                }
-            }
-        }
-
-        private string _currentPhase = "?";
-
-        // -----------------------------------------------------------------------
-        // Prompt-Bau
-        // -----------------------------------------------------------------------
-
-        // -----------------------------------------------------------------------
-        // Lokale Berechnungen (kein KI-Aufruf nÃ¶tig)
-        // -----------------------------------------------------------------------
-
-        /// <summary>Ermittelt den maximalen Ladedruck aus den Ladedruck-Maps (Volllast = letzte Y-Zeile).</summary>
         private static double CalcMaxBoost(IEnumerable<MapModel> maps)
         {
             double max = 0;
             foreach (var m in maps)
             {
-                string n = m.Name.ToLowerInvariant();
+                string n = (m.MapName ?? m.Name).ToLowerInvariant();
                 if (!n.Contains("ladedruck") || n.Contains("begrenzer")) continue;
-                // Volllast = letzte Y-Zeile (hoechste RPM oder hoechste IQ-Spalte)
                 int lastRow = m.Rows - 1;
                 for (int c = 0; c < m.Cols; c++)
                     if (m.Values[lastRow, c] > max && m.Values[lastRow, c] < 5000)
@@ -321,13 +219,12 @@ namespace ECM_Stage_Helper_Tool.AiRemap
             return max;
         }
 
-        /// <summary>Ermittelt den maximalen Raildruck aus den Raildruck-Maps.</summary>
         private static double CalcMaxRailPressure(IEnumerable<MapModel> maps)
         {
             double max = 0;
             foreach (var m in maps)
             {
-                string n = m.Name.ToLowerInvariant();
+                string n = (m.MapName ?? m.Name).ToLowerInvariant();
                 if (!n.Contains("raildruck")) continue;
                 for (int r = 0; r < m.Rows; r++)
                     for (int c = 0; c < m.Cols; c++)
@@ -337,13 +234,12 @@ namespace ECM_Stage_Helper_Tool.AiRemap
             return max;
         }
 
-        /// <summary>Gibt den hoechsten X-Achsenwert (mm3/Stk) aus den Rauchbegrenzer-Lambda-Maps zurueck.</summary>
         private static double CalcLambdaFuelLimit(IEnumerable<MapModel> maps)
         {
             double max = 0;
             foreach (var m in maps)
             {
-                string n = m.Name.ToLowerInvariant();
+                string n = (m.MapName ?? m.Name).ToLowerInvariant();
                 if (!n.Contains("rauchbegrenzer") && !n.Contains("lambda")) continue;
                 foreach (double x in m.XAxis)
                     if (x > max && x < 2000) max = x;
@@ -351,25 +247,25 @@ namespace ECM_Stage_Helper_Tool.AiRemap
             return max > 0 ? max : double.MaxValue;
         }
 
-        /// <summary>Liest den hoechsten Wert aus der Begrenzer-Kraftstoffmenge-Map.</summary>
         private static double CalcMaxFuelFromLimiter(IEnumerable<MapModel> maps)
         {
             double max = 0;
             foreach (var m in maps)
             {
-                string n = m.Name.ToLowerInvariant();
-                if (!n.Contains("begrenzer") || !n.Contains("kraftstoff")) continue;
+                string n = (m.MapName ?? m.Name).ToLowerInvariant();
+                if (!n.Contains("begrenzer") || !n.Contains("kraftstoffmenge")) continue;
                 for (int r = 0; r < m.Rows; r++)
                     for (int c = 0; c < m.Cols; c++)
-                        if (m.Values[r, c] > max) max = m.Values[r, c];
+                        if (m.Values[r, c] > max && m.Values[r, c] < 200) max = m.Values[r, c];
             }
-            // Fallback: hÃ¶chster Wert aller Einspritz-Begrenzer-Maps
+            // Fallback: breitere Suche
             if (max < 1)
             {
                 foreach (var m in maps)
                 {
-                    string n = m.Name.ToLowerInvariant();
-                    if (!n.Contains("begrenzer")) continue;
+                    string n = (m.MapName ?? m.Name).ToLowerInvariant();
+                    if (!n.Contains("begrenzer") || !n.Contains("kraftstoff")) continue;
+                    if (n.Contains("druck")) continue;
                     for (int r = 0; r < m.Rows; r++)
                         for (int c = 0; c < m.Cols; c++)
                             if (m.Values[r, c] > max && m.Values[r, c] < 200) max = m.Values[r, c];
@@ -378,378 +274,204 @@ namespace ECM_Stage_Helper_Tool.AiRemap
             return max;
         }
 
-        /// <summary>Liest den hÃ¶chsten Nm-Wert aus der Drehmoment-Begrenzer-Map.</summary>
         private static double CalcMaxTorqueFromLimiter(IEnumerable<MapModel> maps)
         {
-            double max = 0;
-            foreach (var m in maps)
+            var mapList = maps as IList<MapModel> ?? maps.ToList();
+            double scalarCap = GetScalarNmCap(mapList);
+
+            // 2D Drehmoment-Begrenzer: Max bei Volllast
+            MapModel torqueLimMap = FindTorqueLimiterMap(mapList);
+            double nmFromMap = double.MaxValue;
+            if (torqueLimMap != null)
             {
-                string n = m.Name.ToLowerInvariant();
-                if (!n.Contains("drehmoment") || !n.Contains("begrenzer")) continue;
-                // Volllast = letzte Y-Zeile (hoechster hPa-Wert = hoechster Ladedruck)
-                int fullLoadRow = m.Rows - 1;
-                for (int c = 0; c < m.Cols; c++)
-                    if (m.Values[fullLoadRow, c] > max && m.Values[fullLoadRow, c] < 1000)
-                        max = m.Values[fullLoadRow, c];
+                int fullLoadRow = torqueLimMap.Rows - 1;
+                double max = 0;
+                for (int c = 0; c < torqueLimMap.Cols; c++)
+                    if (torqueLimMap.Values[fullLoadRow, c] > max)
+                        max = torqueLimMap.Values[fullLoadRow, c];
+                if (max > 0) nmFromMap = max;
             }
-            // Fallback: globales Maximum
-            if (max < 1)
-            {
-                foreach (var m in maps)
-                {
-                    string n = m.Name.ToLowerInvariant();
-                    if (!n.Contains("drehmoment") || !n.Contains("begrenzer")) continue;
-                    for (int r = 0; r < m.Rows; r++)
-                        for (int c = 0; c < m.Cols; c++)
-                            if (m.Values[r, c] > max && m.Values[r, c] < 1000) max = m.Values[r, c];
-                }
-            }
-            return max;
+
+            // MIN(2D-Map, skalar)
+            double result = Math.Min(nmFromMap, scalarCap);
+            return result < double.MaxValue ? result : 0;
         }
 
-        /// <summary>Gibt die RPM bei maximalem Drehmoment (Volllast-Zeile) zurueck.</summary>
-        private static double CalcMaxTorqueRpm(IEnumerable<MapModel> maps)
+        // RPM-abhaengige Wirkungsgrad-Korrektur (relativ zu Peak bei ~2000 RPM)
+        private static readonly double[] CorrRpm = { 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500 };
+        private static readonly double[] CorrVal = { 0.97, 0.99, 1.00, 0.99, 0.96, 0.91, 0.84, 0.78 };
+
+        private static (double kw, double ps, double rpm) CalcMaxPower(IEnumerable<MapModel> maps)
         {
-            double maxVal = 0; double rpmAtMax = 2000;
+            var mapList = maps as IList<MapModel> ?? maps.ToList();
+
+            MapModel fuelLimMap = null;
+            foreach (var m in mapList)
+            {
+                string n = (m.MapName ?? m.Name).ToLowerInvariant();
+                if (!n.Contains("begrenzer") || !n.Contains("kraftstoff")) continue;
+                if (n.Contains("druck")) continue;
+                if (m.Rows > 1 && m.Cols > 1) { fuelLimMap = m; break; }
+            }
+            if (fuelLimMap == null) return (0, 0, 0);
+
+            MapModel torqueLimMap = FindTorqueLimiterMap(mapList);
+            double scalarNmCap = GetScalarNmCap(mapList);
+
+            int lastCol = fuelLimMap.Cols - 1;
+
+            // Kalibrierung: Faktor aus ORIGINAL Peak-IQ und ORIGINAL skalar Cap
+            double calibFactor = 0;
+            double origNmCap = GetOriginalScalarNmCap(mapList);
+            if (origNmCap < double.MaxValue)
+            {
+                double peakIqMg = 0;
+                for (int r = 0; r < fuelLimMap.Rows; r++)
+                {
+                    double rpm2 = fuelLimMap.YAxis[r];
+                    if (rpm2 < 1500 || rpm2 > 2500) continue;
+                    double iqMg2 = fuelLimMap.GetOriginalValue(r, lastCol) * DieselDensity;
+                    if (iqMg2 > peakIqMg) peakIqMg = iqMg2;
+                }
+                if (peakIqMg > 1)
+                    calibFactor = origNmCap / peakIqMg;
+            }
+            if (calibFactor <= 0) calibFactor = 5.15;
+
+            double maxKw = 0, maxPs = 0, maxRpm = 0;
+
+            for (int r = 0; r < fuelLimMap.Rows; r++)
+            {
+                double rpm = fuelLimMap.YAxis[r];
+                if (rpm <= 0) continue;
+
+                double iqMm3 = fuelLimMap.Values[r, lastCol];
+                if (iqMm3 <= 0) continue;
+
+                double iqMg = iqMm3 * DieselDensity;
+                double nmFromFuel = iqMg * calibFactor * InterpolatePhysics(CorrRpm, CorrVal, rpm);
+
+                double nmFromMap = double.MaxValue;
+                if (torqueLimMap != null)
+                {
+                    double limit = GetTorqueLimitAtRpm(torqueLimMap, rpm);
+                    if (limit > 0) nmFromMap = limit;
+                }
+
+                double nm = Math.Min(nmFromFuel, Math.Min(nmFromMap, scalarNmCap));
+                if (nm <= 0) continue;
+
+                double ps = (nm * rpm) / PsConstant;
+                double kw = (nm * rpm) / KwConstant;
+                if (ps > maxPs)
+                {
+                    maxKw  = kw;
+                    maxPs  = ps;
+                    maxRpm = rpm;
+                }
+            }
+            return (maxKw, maxPs, maxRpm);
+        }
+
+        private static double GetScalarNmCap(IList<MapModel> maps)
+        {
+            double nmCap = double.MaxValue;
             foreach (var m in maps)
             {
-                string n = m.Name.ToLowerInvariant();
+                string n = (m.MapName ?? m.Name).ToLowerInvariant();
                 if (!n.Contains("drehmoment") || !n.Contains("begrenzer")) continue;
-                // Volllast = letzte Y-Zeile (hoechster hPa); X-Achse = RPM
-                int fullLoadRow = m.Rows - 1;
-                for (int c = 0; c < m.Cols; c++)
-                    if (m.Values[fullLoadRow, c] > maxVal && m.Values[fullLoadRow, c] < 1000)
-                    {
-                        maxVal    = m.Values[fullLoadRow, c];
-                        rpmAtMax  = m.XAxis[c];
-                    }
+                if (m.IsScalar || (m.Rows == 1 && m.Cols == 1))
+                {
+                    double val = m.Values[0, 0];
+                    if (val > 0 && val < nmCap) nmCap = val;
+                }
+            }
+            return nmCap;
+        }
+
+        private static double GetOriginalScalarNmCap(IList<MapModel> maps)
+        {
+            double nmCap = double.MaxValue;
+            foreach (var m in maps)
+            {
+                string n = (m.MapName ?? m.Name).ToLowerInvariant();
+                if (!n.Contains("drehmoment") || !n.Contains("begrenzer")) continue;
+                if (m.IsScalar || (m.Rows == 1 && m.Cols == 1))
+                {
+                    double val = m.GetOriginalValue(0, 0);
+                    if (val > 0 && val < nmCap) nmCap = val;
+                }
+            }
+            return nmCap;
+        }
+
+        private static double CalcMaxTorqueRpm(IEnumerable<MapModel> maps)
+        {
+            MapModel fuelLimMap = null;
+            foreach (var m in maps)
+            {
+                string n = (m.MapName ?? m.Name).ToLowerInvariant();
+                if (!n.Contains("begrenzer") || !n.Contains("kraftstoff")) continue;
+                if (n.Contains("druck")) continue;
+                if (m.Rows > 1 && m.Cols > 1) { fuelLimMap = m; break; }
+            }
+            if (fuelLimMap == null) return 2000;
+
+            int lastCol = fuelLimMap.Cols - 1;
+            double maxIq = 0, rpmAtMax = 2000;
+            for (int r = 0; r < fuelLimMap.Rows; r++)
+            {
+                if (fuelLimMap.Values[r, lastCol] > maxIq)
+                {
+                    maxIq = fuelLimMap.Values[r, lastCol];
+                    rpmAtMax = fuelLimMap.YAxis[r];
+                }
             }
             return rpmAtMax > 0 ? rpmAtMax : 2000;
         }
 
         // -----------------------------------------------------------------------
-        // Prompt-Bau
+        // Hilfsmethoden fuer Drehmoment-Begrenzer
         // -----------------------------------------------------------------------
 
-        private static string BuildMapsBlock(IEnumerable<MapModel> maps)
+        private static MapModel FindTorqueLimiterMap(IEnumerable<MapModel> maps)
         {
-            var sb = new StringBuilder();
-            foreach (var map in maps)
+            foreach (var m in maps)
             {
-                sb.AppendLine($"=== {map.Name} ===");
-                if (!string.IsNullOrEmpty(map.MapName))
-                    sb.AppendLine($"Bezeichnung: {map.MapName}");
-                if (!string.IsNullOrEmpty(map.Unit))
-                    sb.AppendLine($"Einheit: {map.Unit}");
-
-                // Achsen-Header
-                sb.Append(map.AxisLabel ?? "Y\\X");
-                for (int c = 0; c < map.Cols; c++)
-                    sb.Append($"\t{map.XAxis[c]:F2}");
-                sb.AppendLine();
-
-                // Datenzeilen
-                for (int r = 0; r < map.Rows; r++)
-                {
-                    sb.Append($"{map.YAxis[r]:F2}");
-                    for (int c = 0; c < map.Cols; c++)
-                        sb.Append($"\t{map.Values[r, c]:F2}");
-                    sb.AppendLine();
-                }
-                sb.AppendLine();
+                string n = (m.MapName ?? m.Name).ToLowerInvariant();
+                if (!n.Contains("drehmoment") || !n.Contains("begrenzer")) continue;
+                if (m.IsScalar || (m.Rows == 1 && m.Cols == 1)) continue;
+                bool hasRpm = m.AxisLabel != null &&
+                    m.AxisLabel.IndexOf("RPM", StringComparison.OrdinalIgnoreCase) >= 0;
+                if (hasRpm && m.Rows > 1 && m.Cols > 1) return m;
             }
-            return sb.ToString();
+            return null;
         }
 
-        // -----------------------------------------------------------------------
-        // JSON-Parsing
-        // -----------------------------------------------------------------------
-
-        private static string ExtractTextFromResponse(string responseJson)
+        private static double GetTorqueLimitAtRpm(MapModel torqueLimMap, double rpm)
         {
-            // Anthropic-Format: {"content":[{"type":"text","text":"..."}],...}
-            int textIdx = responseJson.IndexOf("\"text\":", StringComparison.Ordinal);
-            if (textIdx < 0)
-                throw new Exception("Kein 'text'-Feld in der API-Antwort gefunden.\n" + responseJson);
+            int fullLoadRow = torqueLimMap.Rows - 1;
 
-            int pos = textIdx + 7;
-            while (pos < responseJson.Length && responseJson[pos] == ' ') pos++;
+            if (rpm <= torqueLimMap.XAxis[0])
+                return torqueLimMap.Values[fullLoadRow, 0];
+            if (rpm >= torqueLimMap.XAxis[torqueLimMap.Cols - 1])
+                return torqueLimMap.Values[fullLoadRow, torqueLimMap.Cols - 1];
 
-            if (pos >= responseJson.Length || responseJson[pos] != '"')
-                throw new Exception("Unerwartetes Format im 'text'-Feld.");
-
-            var sb = new StringBuilder();
-            int i = pos + 1;
-            while (i < responseJson.Length)
+            for (int c = 1; c < torqueLimMap.Cols; c++)
             {
-                char ch = responseJson[i];
-                if (ch == '"') break;
-                if (ch == '\\' && i + 1 < responseJson.Length)
+                if (torqueLimMap.XAxis[c] >= rpm)
                 {
-                    char next = responseJson[i + 1];
-                    switch (next)
-                    {
-                        case '"':  sb.Append('"');  i += 2; continue;
-                        case '\\': sb.Append('\\'); i += 2; continue;
-                        case 'n':  sb.Append('\n'); i += 2; continue;
-                        case 'r':  sb.Append('\r'); i += 2; continue;
-                        case 't':  sb.Append('\t'); i += 2; continue;
-                    }
-                }
-                sb.Append(ch);
-                i++;
-            }
-            return sb.ToString().Trim();
-        }
-
-        private static AnalysisResult ParseAnalysisResult(string json)
-        {
-            json = StripCodeFences(json);
-
-            var result = new AnalysisResult();
-            result.MaxFuelQuantity     = GetJsonDouble(json, "max_fuel_quantity");
-            result.FuelUnit            = GetJsonString(json, "fuel_unit") ?? "mg";
-            result.MaxPowerKw          = GetJsonDouble(json, "max_power_kw");
-            result.MaxTorqueNm         = GetJsonDouble(json, "max_torque_nm");
-            result.MaxTorqueRpm        = GetJsonDouble(json, "max_torque_rpm");
-            result.MaxPowerRpm         = GetJsonDouble(json, "max_power_rpm");
-            result.MaxBoostHpa         = GetJsonDouble(json, "max_boost_hpa");
-            result.MaxRailPressureBar  = GetJsonDouble(json, "max_rail_pressure_bar");
-            result.Summary             = GetJsonString(json, "summary") ?? "";
-            result.MapsToChange        = GetJsonStringArray(json, "maps_to_change");
-            return result;
-        }
-
-        private static RemapResult ParseRemapResult(string json)
-        {
-            json = StripCodeFences(json);
-
-            var result = new RemapResult();
-            result.ExpectedPowerKw  = GetJsonDouble(json, "expected_power_kw");
-            result.ExpectedTorqueNm = GetJsonDouble(json, "expected_torque_nm");
-            result.Notes            = GetJsonString(json, "notes") ?? "";
-            result.Maps             = ParseMapRemaps(json);
-            return result;
-        }
-
-        private static List<MapRemap> ParseMapRemaps(string json)
-        {
-            var list = new List<MapRemap>();
-
-            int mapsIdx = json.IndexOf("\"maps\"", StringComparison.Ordinal);
-            if (mapsIdx < 0) return list;
-
-            int arrStart = json.IndexOf('[', mapsIdx);
-            if (arrStart < 0) return list;
-
-            // Jedes Objekt { } im Array extrahieren
-            int depth = 0;
-            int objStart = -1;
-            for (int i = arrStart; i < json.Length; i++)
-            {
-                char ch = json[i];
-                if (ch == '{')
-                {
-                    if (depth == 0) objStart = i;
-                    depth++;
-                }
-                else if (ch == '}')
-                {
-                    depth--;
-                    if (depth == 0 && objStart >= 0)
-                    {
-                        string objJson = json.Substring(objStart, i - objStart + 1);
-                        var mr = new MapRemap();
-                        mr.FileName          = GetJsonString(objJson, "file_name") ?? "";
-                        mr.ChangeDescription = GetJsonString(objJson, "change_description") ?? "";
-                        mr.NewXAxis          = GetJsonDoubleArray(objJson, "new_x_axis");
-                        mr.NewYAxis          = GetJsonDoubleArray(objJson, "new_y_axis");
-                        mr.NewValues         = GetJsonDouble2DArray(objJson, "new_values");
-                        if (!string.IsNullOrEmpty(mr.FileName))
-                            list.Add(mr);
-                        objStart = -1;
-                    }
+                    double rpmLo = torqueLimMap.XAxis[c - 1];
+                    double rpmHi = torqueLimMap.XAxis[c];
+                    double valLo = torqueLimMap.Values[fullLoadRow, c - 1];
+                    double valHi = torqueLimMap.Values[fullLoadRow, c];
+                    double span = rpmHi - rpmLo;
+                    if (span < 1e-9) return valLo;
+                    double frac = (rpm - rpmLo) / span;
+                    return valLo + frac * (valHi - valLo);
                 }
             }
-            return list;
-        }
-
-        // -----------------------------------------------------------------------
-        // Minimal-JSON-Hilfsmethoden (kein externes NuGet nÃ¶tig)
-        // -----------------------------------------------------------------------
-
-        private static string StripCodeFences(string s)
-        {
-            s = s.Trim();
-            if (s.StartsWith("```"))
-            {
-                int nl = s.IndexOf('\n');
-                if (nl >= 0) s = s.Substring(nl + 1);
-                if (s.EndsWith("```")) s = s.Substring(0, s.Length - 3);
-            }
-            return s.Trim();
-        }
-
-        private static double GetJsonDouble(string json, string key)
-        {
-            string pat = $"\"{key}\"";
-            int k = json.IndexOf(pat, StringComparison.Ordinal);
-            if (k < 0) return 0;
-            int colon = json.IndexOf(':', k + pat.Length);
-            if (colon < 0) return 0;
-            int start = colon + 1;
-            while (start < json.Length && (json[start] == ' ' || json[start] == '\n' || json[start] == '\r')) start++;
-            int end = start;
-            while (end < json.Length && (char.IsDigit(json[end]) || json[end] == '.' || json[end] == '-' || json[end] == '+' || json[end] == 'e' || json[end] == 'E')) end++;
-            if (end == start) return 0;
-            double.TryParse(json.Substring(start, end - start), System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out double val);
-            return val;
-        }
-
-        private static string GetJsonString(string json, string key)
-        {
-            string pat = $"\"{key}\"";
-            int k = json.IndexOf(pat, StringComparison.Ordinal);
-            if (k < 0) return null;
-            int colon = json.IndexOf(':', k + pat.Length);
-            if (colon < 0) return null;
-            int q = json.IndexOf('"', colon + 1);
-            if (q < 0) return null;
-            var sb = new StringBuilder();
-            int i = q + 1;
-            while (i < json.Length)
-            {
-                char ch = json[i];
-                if (ch == '"') break;
-                if (ch == '\\' && i + 1 < json.Length) { sb.Append(json[i + 1]); i += 2; continue; }
-                sb.Append(ch);
-                i++;
-            }
-            return sb.ToString();
-        }
-
-        private static List<string> GetJsonStringArray(string json, string key)
-        {
-            var list = new List<string>();
-            string pat = $"\"{key}\"";
-            int k = json.IndexOf(pat, StringComparison.Ordinal);
-            if (k < 0) return list;
-            int arrStart = json.IndexOf('[', k + pat.Length);
-            int arrEnd   = json.IndexOf(']', arrStart >= 0 ? arrStart : 0);
-            if (arrStart < 0 || arrEnd < 0) return list;
-            string inner = json.Substring(arrStart + 1, arrEnd - arrStart - 1);
-            foreach (var part in inner.Split(','))
-            {
-                string s = part.Trim().Trim('"');
-                if (!string.IsNullOrEmpty(s)) list.Add(s);
-            }
-            return list;
-        }
-
-        private static double[] GetJsonDoubleArray(string json, string key)
-        {
-            string pat = $"\"{key}\"";
-            int k = json.IndexOf(pat, StringComparison.Ordinal);
-            if (k < 0) return new double[0];
-            int arrStart = json.IndexOf('[', k + pat.Length);
-            int arrEnd   = json.IndexOf(']', arrStart >= 0 ? arrStart : 0);
-            if (arrStart < 0 || arrEnd < 0) return new double[0];
-            string inner = json.Substring(arrStart + 1, arrEnd - arrStart - 1);
-            var parts = inner.Split(',');
-            var result = new List<double>();
-            foreach (var p in parts)
-            {
-                if (double.TryParse(p.Trim(), System.Globalization.NumberStyles.Float,
-                    System.Globalization.CultureInfo.InvariantCulture, out double v))
-                    result.Add(v);
-            }
-            return result.ToArray();
-        }
-
-        private static double[,] GetJsonDouble2DArray(string json, string key)
-        {
-            string pat = $"\"{key}\"";
-            int k = json.IndexOf(pat, StringComparison.Ordinal);
-            if (k < 0) return new double[0, 0];
-
-            int outerStart = json.IndexOf('[', k + pat.Length);
-            if (outerStart < 0) return new double[0, 0];
-
-            // Finde das zugehÃ¶rige schlieÃŸende ] auf gleicher Tiefe
-            int depth = 0;
-            int outerEnd = -1;
-            for (int i = outerStart; i < json.Length; i++)
-            {
-                if (json[i] == '[') depth++;
-                else if (json[i] == ']') { depth--; if (depth == 0) { outerEnd = i; break; } }
-            }
-            if (outerEnd < 0) return new double[0, 0];
-
-            // Innere Arrays extrahieren
-            var rows = new List<double[]>();
-            int pos = outerStart + 1;
-            while (pos < outerEnd)
-            {
-                int rowStart = json.IndexOf('[', pos);
-                if (rowStart < 0 || rowStart >= outerEnd) break;
-                int rowEnd = json.IndexOf(']', rowStart + 1);
-                if (rowEnd < 0) break;
-                string rowStr = json.Substring(rowStart + 1, rowEnd - rowStart - 1);
-                var cells = new List<double>();
-                foreach (var p in rowStr.Split(','))
-                {
-                    if (double.TryParse(p.Trim(), System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out double v))
-                        cells.Add(v);
-                }
-                rows.Add(cells.ToArray());
-                pos = rowEnd + 1;
-            }
-
-            if (rows.Count == 0) return new double[0, 0];
-            int cols = rows.Max(r => r.Length);
-            var result = new double[rows.Count, cols];
-            for (int r = 0; r < rows.Count; r++)
-                for (int c = 0; c < rows[r].Length; c++)
-                    result[r, c] = rows[r][c];
-            return result;
-        }
-
-        // -----------------------------------------------------------------------
-        // Minimaler JSON-Serializer fÃ¼r den Request (kein NuGet nÃ¶tig)
-        // -----------------------------------------------------------------------
-
-        private static string SimpleJsonSerialize(object obj)
-        {
-            if (obj == null) return "null";
-            var t = obj.GetType();
-
-            if (obj is string s)
-                return "\"" + s.Replace("\\", "\\\\").Replace("\"", "\\\"")
-                               .Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t") + "\"";
-
-            if (obj is bool b) return b ? "true" : "false";
-            if (obj is int || obj is long || obj is double || obj is float)
-                return Convert.ToString(obj, System.Globalization.CultureInfo.InvariantCulture);
-
-            if (t.IsArray)
-            {
-                var arr = (Array)obj;
-                var parts = new List<string>();
-                foreach (var item in arr) parts.Add(SimpleJsonSerialize(item));
-                return "[" + string.Join(",", parts) + "]";
-            }
-
-            // Anonymes Objekt / POCO â†’ via Reflection
-            var props = t.GetProperties();
-            var kvs = new List<string>();
-            foreach (var p in props)
-            {
-                var val = p.GetValue(obj, null);
-                kvs.Add("\"" + p.Name + "\":" + SimpleJsonSerialize(val));
-            }
-            return "{" + string.Join(",", kvs) + "}";
+            return torqueLimMap.Values[fullLoadRow, torqueLimMap.Cols - 1];
         }
     }
 }

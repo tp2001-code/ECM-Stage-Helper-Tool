@@ -31,6 +31,7 @@
             this._miRecentFolders = new System.Windows.Forms.ToolStripMenuItem();
             this._miSave = new System.Windows.Forms.ToolStripMenuItem();
             this._miSaveAll = new System.Windows.Forms.ToolStripMenuItem();
+            this._miUnloadCsv = new System.Windows.Forms.ToolStripMenuItem();
             this._miSepBin = new System.Windows.Forms.ToolStripSeparator();
             this._miOpenBin = new System.Windows.Forms.ToolStripMenuItem();
             this._miSaveBin = new System.Windows.Forms.ToolStripMenuItem();
@@ -125,6 +126,7 @@
             this._miRecentFolders,
             this._miSave,
             this._miSaveAll,
+            this._miUnloadCsv,
             this._miSepBin,
             this._miOpenBin,
             this._miSaveBin,
@@ -183,6 +185,13 @@
             this._miSaveAll.Size = new System.Drawing.Size(168, 22);
             this._miSaveAll.Text = "Alle CSV &speichern";
             this._miSaveAll.Click += new System.EventHandler(this.MiSaveAll_Click);
+            // 
+            // _miUnloadCsv
+            // 
+            this._miUnloadCsv.Name = "_miUnloadCsv";
+            this._miUnloadCsv.Size = new System.Drawing.Size(221, 22);
+            this._miUnloadCsv.Text = "Alle CSV &entladen";
+            this._miUnloadCsv.Click += new System.EventHandler(this.MiUnloadCsv_Click);
             // 
             // _miSepBin
             // 
@@ -337,22 +346,25 @@
             this._mKiRemap.Size = new System.Drawing.Size(72, 20);
             this._mKiRemap.Text = "&KI-Remap";
             this._mKiRemap.BackColor = System.Drawing.Color.FromArgb(210, 230, 255);
-            this._mKiRemap.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this._mKiRemap.Click += new System.EventHandler(this.MiAiRemap_Click);
+            /*this._mKiRemap.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
                 this._miAiRemapWizard,
                 new System.Windows.Forms.ToolStripSeparator(),
-                this._miShiftTorque });
+                this._miShiftTorque
+                });
             // 
             // _miAiRemapWizard
             //
             this._miAiRemapWizard.Name = "_miAiRemapWizard";
             this._miAiRemapWizard.Text = "KI-Remap Wizard...";
             this._miAiRemapWizard.Click += new System.EventHandler(this.MiAiRemap_Click);
+            */
             //
             // _miShiftTorque
             //
-            this._miShiftTorque.Name = "_miShiftTorque";
-            this._miShiftTorque.Text = "Drehmoment-Plateau verschieben...";
-            this._miShiftTorque.Click += new System.EventHandler(this.MiShiftTorquePlateau_Click);
+            //this._miShiftTorque.Name = "_miShiftTorque";
+            //this._miShiftTorque.Text = "Drehmoment-Plateau verschieben...";
+            //this._miShiftTorque.Click += new System.EventHandler(this.MiShiftTorquePlateau_Click);
             // 
             // _mAnsicht
             // 
@@ -816,6 +828,7 @@
         private System.Windows.Forms.ToolStripMenuItem  _miRecentFolders;
         private System.Windows.Forms.ToolStripMenuItem _miSave;
         private System.Windows.Forms.ToolStripMenuItem _miSaveAll;
+        private System.Windows.Forms.ToolStripMenuItem _miUnloadCsv;
         private System.Windows.Forms.ToolStripSeparator _miSepBin;
         private System.Windows.Forms.ToolStripMenuItem _miOpenBin;
         private System.Windows.Forms.ToolStripMenuItem _miSaveBin;

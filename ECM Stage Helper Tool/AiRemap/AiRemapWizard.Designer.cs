@@ -55,7 +55,7 @@
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.Sizable;
             this.MaximizeBox     = false;
             this.StartPosition   = System.Windows.Forms.FormStartPosition.CenterParent;
-            this.Text            = "KI-Remap (Claude)";
+            this.Text            = "Remap Wizard";
             // Kopfzeile
             this._lblStep.Location  = new System.Drawing.Point(12, 8);
             this._lblStep.Size      = new System.Drawing.Size(200, 20);
@@ -82,7 +82,7 @@
             this._lblStep1Info.Location  = new System.Drawing.Point(12, 56);
             this._lblStep1Info.Size      = new System.Drawing.Size(650, 80);
             this._lblStep1Info.AutoSize  = false;
-            this._lblStep1Info.Text      = "Alle geladenen CSV-Maps werden an Claude gesendet.\nClaude ermittelt die max. Einspritzmenge, Leistung und Drehmoment.";
+            this._lblStep1Info.Text      = "Alle geladenen CSV-Maps werden lokal analysiert.\nMax. Einspritzmenge, Leistung und Drehmoment werden berechnet.";
             this._btnAnalyse.Location    = new System.Drawing.Point(12, 152);
             this._btnAnalyse.Size        = new System.Drawing.Size(200, 38);
             this._btnAnalyse.Text        = "Maps analysieren >>";
@@ -177,6 +177,31 @@
             this._lblCurrentNm      = new System.Windows.Forms.Label();
             this._numLimitNm        = new System.Windows.Forms.NumericUpDown();
             AddLimitRow(this._panStep2Scroll, this._lblLimitNmLbl,    "Max. Drehmoment:", this._lblCurrentNm,    this._numLimitNm,    "Nm",  0, 1000, ref y);
+            this._numLimitNm.ValueChanged += new System.EventHandler(this.NumTargetFuel_ValueChanged);
+            // Lambda-Fenster
+            this._lblLambdaWindowLbl = new System.Windows.Forms.Label();
+            this._lblLambdaWindowLbl.Location = new System.Drawing.Point(12, y);
+            this._lblLambdaWindowLbl.Size     = new System.Drawing.Size(180, 20);
+            this._lblLambdaWindowLbl.Text     = "Lambda-Fenster:";
+            this._lblLambdaWindowLbl.Font     = new System.Drawing.Font("Segoe UI", 9F, System.Drawing.FontStyle.Bold);
+            this._numLambdaWindow = new System.Windows.Forms.NumericUpDown();
+            this._numLambdaWindow.Location      = new System.Drawing.Point(200, y);
+            this._numLambdaWindow.Size          = new System.Drawing.Size(80, 22);
+            this._numLambdaWindow.Minimum       = (decimal)0.05;
+            this._numLambdaWindow.Maximum       = (decimal)0.50;
+            this._numLambdaWindow.DecimalPlaces = 2;
+            this._numLambdaWindow.Increment     = (decimal)0.05;
+            this._numLambdaWindow.Value         = (decimal)0.20;
+            var lblLambdaHint = new System.Windows.Forms.Label();
+            lblLambdaHint.Location  = new System.Drawing.Point(288, y + 3);
+            lblLambdaHint.Size      = new System.Drawing.Size(370, 16);
+            lblLambdaHint.Text      = "(Abweichung ueber Ziel-Lambda 1.15, z.B. 0.20 = Fenster 1.15\u20131.35)";
+            lblLambdaHint.ForeColor = System.Drawing.Color.DimGray;
+            lblLambdaHint.Font      = new System.Drawing.Font("Segoe UI", 7.5F);
+            this._panStep2Scroll.Controls.Add(this._lblLambdaWindowLbl);
+            this._panStep2Scroll.Controls.Add(this._numLambdaWindow);
+            this._panStep2Scroll.Controls.Add(lblLambdaHint);
+            y += 32;
             this._panStep2Scroll.Controls.AddRange(new System.Windows.Forms.Control[] {
                 this._lblStep2Title,
                 this._lblMaxFuelLbl, this._lblMaxFuel, this._lblMaxPowerLbl, this._lblMaxPower, this._lblMaxNmLbl, this._lblMaxNm,
@@ -218,7 +243,7 @@
             this._lblConfirmInfo.Location = new System.Drawing.Point(12, 56);
             this._lblConfirmInfo.Size     = new System.Drawing.Size(650, 60);
             this._lblConfirmInfo.AutoSize = false;
-            this._lblConfirmInfo.Text     = "Claude berechnet die neuen Map-Werte. Aenderungen werden temporaer (rot markiert) eingetragen.\nDanach pruefen und ueber Datei >> Alle CSV speichern oder BIN schreiben.";
+            this._lblConfirmInfo.Text     = "Die neuen Map-Werte werden lokal berechnet. Aenderungen werden temporaer (rot markiert) eingetragen.\nDanach pruefen und ueber Datei >> Alle CSV speichern oder BIN schreiben.";
             this._lstConfirm.Location      = new System.Drawing.Point(12, 128);
             this._lstConfirm.Anchor        = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left | System.Windows.Forms.AnchorStyles.Right;
             this._lstConfirm.Size          = new System.Drawing.Size(650, 460);
@@ -341,6 +366,8 @@
         private System.Windows.Forms.Label _lblLimitNmLbl;
         private System.Windows.Forms.Label _lblCurrentNm;
         private System.Windows.Forms.NumericUpDown _numLimitNm;
+        private System.Windows.Forms.Label _lblLambdaWindowLbl;
+        private System.Windows.Forms.NumericUpDown _numLambdaWindow;
         private System.Windows.Forms.Panel _panStep3;
         private System.Windows.Forms.Label _lblStep3Title;
         private System.Windows.Forms.Label _lblConfirmInfo;

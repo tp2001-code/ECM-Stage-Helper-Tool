@@ -61,13 +61,19 @@ namespace ECM_Stage_Helper_Tool.AiRemap
         /// <summary>Max. Ladedruck (hPa). 0 = proportional skalieren ohne hartes Limit.</summary>
         public double MaxBoostHpa { get; set; }
 
-        /// <summary>Max. Raildruck (bar). 0 = Standardlimit 1850 bar.</summary>
+        /// <summary>Max. Raildruck (bar). 0 = Standardlimit 1850 bar.</summary>    
         public double MaxRailPressureBar { get; set; }
 
         /// <summary>Max. Drehmoment (Nm). 0 = proportional skalieren.</summary>
         public double MaxTorqueNm { get; set; }
 
-        /// <summary>Effektiver Boost-Grenzwert: nimmt das gesetzte Limit oder faellt auf 0 zurueck.</summary>
+        /// <summary>Max. Abgastemperatur (°C). 0 = Standardlimit 850°C.</summary>
+        public double MaxEgtCelsius { get; set; }
+
+        /// <summary>Lambda-Fenster (Abweichung ueber Ziel-Lambda 1.15). Standard 0.2.</summary>
+        public double LambdaWindow { get; set; } = 0.20;
+
+        /// <summary>Effektiver Boost-Grenzwert: nimmt das gesetzte Limit oder faellt auf MaxValue zurueck.</summary>
         public double EffectiveBoostLimit => MaxBoostHpa > 0 ? MaxBoostHpa : double.MaxValue;
 
         /// <summary>Effektiver Raildruck-Grenzwert.</summary>
@@ -75,6 +81,9 @@ namespace ECM_Stage_Helper_Tool.AiRemap
 
         /// <summary>Effektives Drehmoment-Limit.</summary>
         public double EffectiveTorqueLimit => MaxTorqueNm > 0 ? MaxTorqueNm : double.MaxValue;
+
+        /// <summary>Effektives Abgastemperatur-Limit (Standard: 850°C fuer BV40 VTG).</summary>
+        public double EffectiveEgtLimit => MaxEgtCelsius > 0 ? MaxEgtCelsius : 850.0;
     }
 
     // ---------------------------------------------------------------------------
@@ -82,7 +91,7 @@ namespace ECM_Stage_Helper_Tool.AiRemap
     // ---------------------------------------------------------------------------
 
     /// <summary>
-    /// Enthält die von Claude berechneten neuen Werte für alle betroffenen Maps.
+    /// Enthaelt die lokal berechneten neuen Werte fuer alle betroffenen Maps.
     /// </summary>
     public class RemapResult
     {
@@ -101,12 +110,12 @@ namespace ECM_Stage_Helper_Tool.AiRemap
         /// <summary>Erwartetes maximales Drehmoment nach dem Remap in Nm.</summary>
         public double ExpectedTorqueNm { get; set; }
 
-        /// <summary>Kommentar / Begründung von Claude.</summary>
+        /// <summary>Kommentar / Hinweis zum Remap.</summary>
         public string Notes { get; set; }
     }
 
     /// <summary>
-    /// Die neuen Daten für eine einzelne Map nach dem KI-Remap.
+    /// Die neuen Daten fuer eine einzelne Map nach dem Remap.
     /// </summary>
     public class MapRemap
     {
